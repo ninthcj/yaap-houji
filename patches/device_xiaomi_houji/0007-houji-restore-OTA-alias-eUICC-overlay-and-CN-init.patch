@@ -1,7 +1,7 @@
 From 18c5fcf5d24f12b6ef5b3a4a15ed6e572f98067d Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 18:01:47 -0400
-Subject: [PATCH 07/10] houji: restore OTA alias, eUICC overlay and CN init
+Subject: [PATCH 07/11] houji: restore OTA alias, eUICC overlay and CN init
 
 - Assert houji,houjiin and accept houjiin in board-info
 - Restore HoujiEuiccOverlay and init.houji.rc (CN masks the Global eUICC overlay)

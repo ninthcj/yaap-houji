@@ -1,0 +1,142 @@
+From 0fcae6099e916d2b545f13213e95853f5a7b186f Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 04:00:49 -0400
+Subject: [PATCH 11/11] houji: integrate staged pure GKI 2.0 6.12
+ kernel/DT/DLKM bundle and align official Vanilla apps
+
+---
+ configs/kernel/prebuilt-product.mk           | 17 +++++++++----
+ configs/kernel/prebuilt.mk                   | 26 +++++++++++---------
+ configs/kernel/system_dlkm.modules.blocklist | 18 ++++++++++++++
+ docs/dev/bringup.md                          |  6 ++---
+ 4 files changed, 47 insertions(+), 20 deletions(-)
+
+diff --git a/configs/kernel/prebuilt-product.mk b/configs/kernel/prebuilt-product.mk
+index 34b4486..97e6e95 100644
+--- a/configs/kernel/prebuilt-product.mk
++++ b/configs/kernel/prebuilt-product.mk
+@@ -1,11 +1,18 @@
+ # SPDX-License-Identifier: Apache-2.0
+ 
+-# In particular, modules.dep refers to versioned paths in system_dlkm. Copy the
+-# complete vendor module tree without flattening or regenerating those paths,
+-# while substituting houji's purified modules.load and module blocklists.
+-HOUJI_STOCK_VDLKM_COPIES := $(call find-copy-subdir-files,*,vendor/xiaomi/houji/kernel/stock/vendor_dlkm/lib/modules,$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules)
++# Copy staged 6.12 vendor_dlkm (or fallback stock vendor_dlkm) without flattening modules.dep,
++# preserving exact topological modules.load while applying houji's authoritative blocklists.
++HOUJI_VDLKM_MOD_DIR := $(if $(wildcard kernel/prebuilts/houji-gki/vendor_dlkm/lib/modules/modules.load),kernel/prebuilts/houji-gki/vendor_dlkm/lib/modules,vendor/xiaomi/houji/kernel/stock/vendor_dlkm/lib/modules)
++HOUJI_VDLKM_COPIES := $(call find-copy-subdir-files,*,$(HOUJI_VDLKM_MOD_DIR),$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules)
++ifneq ($(filter kernel/prebuilts/houji-gki/%,$(HOUJI_VDLKM_MOD_DIR)),)
+ PRODUCT_COPY_FILES += \
+-    $(filter-out %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.load %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist,$(HOUJI_STOCK_VDLKM_COPIES)) \
++    $(filter-out %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/system_dlkm.modules.blocklist,$(HOUJI_VDLKM_COPIES)) \
++    device/xiaomi/houji/configs/kernel/modules.blocklist.houji:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist \
++    device/xiaomi/houji/configs/kernel/system_dlkm.modules.blocklist:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/system_dlkm.modules.blocklist
++else
++PRODUCT_COPY_FILES += \
++    $(filter-out %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.load %:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist,$(HOUJI_VDLKM_COPIES)) \
+     device/xiaomi/houji/configs/kernel/modules.load.vendor_dlkm.houji:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.load \
+     device/xiaomi/houji/configs/kernel/modules.blocklist.houji:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/modules.blocklist \
+     device/xiaomi/houji/configs/kernel/system_dlkm.modules.blocklist:$(TARGET_COPY_OUT_VENDOR_DLKM)/lib/modules/system_dlkm.modules.blocklist
++endif
+diff --git a/configs/kernel/prebuilt.mk b/configs/kernel/prebuilt.mk
+index 46e4df5..9c5fdbf 100644
+--- a/configs/kernel/prebuilt.mk
++++ b/configs/kernel/prebuilt.mk
+@@ -2,12 +2,13 @@
+ 
+ HOUJI_STOCK_KERNEL := vendor/xiaomi/houji/kernel/stock
+ HOUJI_GKI_KERNEL := $(if $(wildcard kernel/prebuilts/houji-gki/Image),kernel/prebuilts/houji-gki,$(HOUJI_STOCK_KERNEL))
++HOUJI_RAMDISK_MOD_DIR := $(if $(wildcard $(HOUJI_GKI_KERNEL)/vendor_ramdisk/lib/modules/modules.load),$(HOUJI_GKI_KERNEL)/vendor_ramdisk/lib/modules,$(HOUJI_STOCK_KERNEL)/vendor_ramdisk/lib/modules)
+ HOUJI_VENDOR_BLOCKLIST := device/xiaomi/houji/configs/kernel/modules.blocklist.houji
+ HOUJI_BLOCKLIST_PATTERNS := $(shell sed -n 's/^blocklist //p' $(HOUJI_VENDOR_BLOCKLIST) | tr '-' '_')
+ 
+ # Userspace components still require exported kernel UAPI headers. Generate
+-# headers from MiCode, while forcing the boot kernel and system_dlkm to the
+-# staged Google GKI release when present (falling back to stock otherwise).
++# headers from MiCode, while forcing the boot kernel, DT/DTBO, and system_dlkm
++# to the staged GKI release when present (falling back to stock otherwise).
+ TARGET_KERNEL_SOURCE := kernel/xiaomi/houji
+ TARGET_KERNEL_CONFIG := gki_defconfig
+ TARGET_KERNEL_VERSION := 6.1
+@@ -15,22 +16,25 @@ TARGET_KERNEL_CLANG_VERSION := r547379
+ KERNEL_NO_GCC := true
+ TARGET_FORCE_PREBUILT_KERNEL := true
+ TARGET_PREBUILT_KERNEL := $(HOUJI_GKI_KERNEL)/Image
+-BOARD_PREBUILT_DTBIMAGE_DIR := $(HOUJI_STOCK_KERNEL)/dtb
+-BOARD_PREBUILT_DTBOIMAGE := $(HOUJI_STOCK_KERNEL)/dtbo.img
++BOARD_PREBUILT_DTBIMAGE_DIR := $(if $(wildcard $(HOUJI_GKI_KERNEL)/dtb/*.dtb),$(HOUJI_GKI_KERNEL)/dtb,$(HOUJI_STOCK_KERNEL)/dtb)
++BOARD_PREBUILT_DTBOIMAGE := $(if $(wildcard $(HOUJI_GKI_KERNEL)/dtbo.img),$(HOUJI_GKI_KERNEL)/dtbo.img,$(HOUJI_STOCK_KERNEL)/dtbo.img)
+ 
+ BOARD_USES_VENDOR_DLKMIMAGE := true
+ BOARD_USES_SYSTEM_DLKMIMAGE := true
+-# Preserve the versioned system module paths expected by the stock init script.
++# Preserve the versioned system module paths expected by the init script.
+ BOARD_SYSTEM_DLKM_SRC := $(HOUJI_GKI_KERNEL)/system_dlkm
+ 
+-# Signed stock modules must retain their bytes. Filter boot/recovery load lists
+-# directly from the authoritative houji blocklist so foreign-SoC, absent-chip,
+-# and unused HyperOS Ring-0 hook modules are never loaded into kernel memory.
++# Staged/stock modules must retain their bytes and depmod/load topology.
+ BOARD_DO_NOT_STRIP_VENDOR_RAMDISK_MODULES := true
+ BOARD_DO_NOT_STRIP_RECOVERY_MODULES := true
+-BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(HOUJI_STOCK_KERNEL)/vendor_ramdisk/lib/modules/*.ko)
+-BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(shell awk 'BEGIN{split("$(HOUJI_BLOCKLIST_PATTERNS)",b," "); for(i in b) blk[b[i]]=1} {m=$$0; sub(/^.*\//,"",m); k=m; sub(/\.ko$$/,"",k); gsub(/-/,"_",k); if(m!="" && !blk[k]) print m}' $(HOUJI_STOCK_KERNEL)/vendor_ramdisk/lib/modules/modules.load)
+-BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD := $(shell awk 'BEGIN{split("$(HOUJI_BLOCKLIST_PATTERNS)",b," "); for(i in b) blk[b[i]]=1} {m=$$0; sub(/^.*\//,"",m); k=m; sub(/\.ko$$/,"",k); gsub(/-/,"_",k); if(m!="" && !blk[k]) print m}' $(HOUJI_STOCK_KERNEL)/vendor_ramdisk/lib/modules/modules.load.recovery)
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES := $(wildcard $(HOUJI_RAMDISK_MOD_DIR)/*.ko)
++ifneq ($(wildcard $(HOUJI_GKI_KERNEL)/vendor_ramdisk/lib/modules/modules.load),)
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(strip $(shell cat $(HOUJI_RAMDISK_MOD_DIR)/modules.load))
++BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD := $(strip $(shell cat $(HOUJI_RAMDISK_MOD_DIR)/modules.load.recovery))
++else
++BOARD_VENDOR_RAMDISK_KERNEL_MODULES_LOAD := $(shell awk 'BEGIN{split("$(HOUJI_BLOCKLIST_PATTERNS)",b," "); for(i in b) blk[b[i]]=1} {m=$$0; sub(/^.*\//,"",m); k=m; sub(/\.ko$$/,"",k); gsub(/-/,"_",k); if(m!="" && !blk[k]) print m}' $(HOUJI_RAMDISK_MOD_DIR)/modules.load)
++BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD := $(shell awk 'BEGIN{split("$(HOUJI_BLOCKLIST_PATTERNS)",b," "); for(i in b) blk[b[i]]=1} {m=$$0; sub(/^.*\//,"",m); k=m; sub(/\.ko$$/,"",k); gsub(/-/,"_",k); if(m!="" && !blk[k]) print m}' $(HOUJI_RAMDISK_MOD_DIR)/modules.load.recovery)
++endif
+ BOARD_VENDOR_RAMDISK_KERNEL_MODULES_BLOCKLIST_FILE := $(HOUJI_VENDOR_BLOCKLIST)
+ BOARD_RECOVERY_KERNEL_MODULES := $(BOARD_VENDOR_RAMDISK_KERNEL_MODULES)
+ BOARD_RECOVERY_KERNEL_MODULES_LOAD := $(BOARD_VENDOR_RAMDISK_RECOVERY_KERNEL_MODULES_LOAD)
+diff --git a/configs/kernel/system_dlkm.modules.blocklist b/configs/kernel/system_dlkm.modules.blocklist
+index 07e3780..ac67604 100644
+--- a/configs/kernel/system_dlkm.modules.blocklist
++++ b/configs/kernel/system_dlkm.modules.blocklist
+@@ -20,3 +20,21 @@ blocklist nhc_routing
+ blocklist nhc_udp
+ blocklist slcan
+ blocklist vcan
++blocklist exynos_hvm
++blocklist 9pnet
++blocklist 9pnet_fd
++blocklist ptp_kvm
++blocklist vcpu_stall_detector
++blocklist virtio_balloon
++blocklist virtio_blk
++blocklist virtio_console
++blocklist virtio_pci
++blocklist virtio_pci_legacy_dev
++blocklist virtio_pci_modern_dev
++blocklist vmw_vsock_virtio_transport
++blocklist vmw_vsock_virtio_transport_common
++blocklist vsock
++blocklist vsock_diag
++blocklist xhci_pci_renesas
++blocklist snd_hda_codec_hdmi
++blocklist usbmon
+diff --git a/docs/dev/bringup.md b/docs/dev/bringup.md
+index d81747b..fbd22c3 100644
+--- a/docs/dev/bringup.md
++++ b/docs/dev/bringup.md
+@@ -102,10 +102,8 @@ python3 device/xiaomi/houji/extract-files.py --kang /path/to/rom/images
+ 当前基线补齐国行相机 wide_ii/tele_ii 配置；按产品要求移除 Google Hotword
+ enrollment 和 SoterService 应用及专用 enrollment 文件。同版 `xiaomi-modem-common.jar` 随包提供；Pixel EuiccGoogle APK 不随包提供。
+ YAAP 产品使用清单跟踪的 OpenEUICC 作为 LPA，不依赖面向 Pixel EuiccGoogle 的策略模块。
+-`yaap_houji-user` 使用原生 microG；不安装 Play 签名且内置 Google SDK 的 YASR、内置
+-Wear Play Services 客户端的 TalkBack 预编译包或依赖 Firebase 的 `ImsServiceEntitlement`。
+-国行 Qualcomm IMS 服务仍保留；需要 Google/Firebase carrier entitlement 的运营商功能和
+-屏幕阅读器不随包提供。
++`yaap_houji-user` 使用原生 microG，保留 YAAP 官方 Vanilla 预装的 `YASR` 录屏与 Calyx `TalkBack` 无障碍读屏，同时不随包提供依赖 Firebase 的 `ImsServiceEntitlement`。
++国行 Qualcomm IMS 服务仍保留；需要 Google/Firebase carrier entitlement 的运营商功能不随包提供。
+ 
+ `vendor/xiaomi/houji/radio/*.img` 使用 Git LFS，其他 vendor 文件正常提交。
+ 需要安装 Git LFS 并执行 `git lfs install`，推送时确保 LFS 对象一并上传。
+-- 
+2.56.1
+

@@ -1,7 +1,7 @@
 From 831b7f3e743fbade06ede9e8656a8a27c5d1251e Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 14:28:07 -0400
-Subject: [PATCH 02/10] houji: pair OpenEUICC with XiaomiEsimSwitcher
+Subject: [PATCH 02/11] houji: pair OpenEUICC with XiaomiEsimSwitcher
 
 Retain the CN resource-based eSIM gate and do not expose the Global-only eUICC overlay.
 ---

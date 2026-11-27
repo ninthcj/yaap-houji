@@ -1,7 +1,7 @@
 From bc3eaa5f23c8e9acca1b6e67e12a17b8a0f3540f Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Wed, 25 Nov 2026 13:51:38 -0400
-Subject: [PATCH 10/10] houji: enable real-time Gaussian blur and 10W Wireless
+Subject: [PATCH 10/11] houji: enable real-time Gaussian blur and 10W Wireless
  PowerShare
 
 ---

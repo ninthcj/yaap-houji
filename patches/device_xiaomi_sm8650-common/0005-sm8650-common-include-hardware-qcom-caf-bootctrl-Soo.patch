@@ -1,7 +1,7 @@
 From 53b58a1c469c900eec2eee4144a2572c76a05e60 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Tue, 24 Nov 2026 07:38:09 -0400
-Subject: [PATCH 5/8] sm8650-common: include hardware/qcom-caf/bootctrl Soong
+Subject: [PATCH 5/9] sm8650-common: include hardware/qcom-caf/bootctrl Soong
  namespace
 
 ---

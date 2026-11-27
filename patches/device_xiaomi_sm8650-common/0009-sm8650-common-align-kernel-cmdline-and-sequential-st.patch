@@ -1,0 +1,37 @@
+From 2f31312f89a21eb20c921b81f94a669629f53d95 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Fri, 27 Nov 2026 04:00:49 -0400
+Subject: [PATCH 9/9] sm8650-common: align kernel cmdline and sequential
+ stage-1 bootconfig for pure GKI 6.12
+
+---
+ BoardConfigCommon.mk | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/BoardConfigCommon.mk b/BoardConfigCommon.mk
+index f3a5bcf..71ad590 100644
+--- a/BoardConfigCommon.mk
++++ b/BoardConfigCommon.mk
+@@ -83,13 +83,16 @@ BOARD_KERNEL_BASE := 0x00000000
+ BOARD_KERNEL_CMDLINE := \
+     video=vfb:640x400,bpp=32,memsize=3072000 \
+     disable_dma32=on \
+-    swinfo.fingerprint=$(YAAP_VERSION) \
+-    mtdoops.fingerprint=$(YAAP_VERSION)
++    android_arch_task_struct_size=512 \
++    console=ramoops \
++    panic=5 \
++    qcom_scm.download_mode=0 \
++    fw_devlink.strict=0
+ 
+ BOARD_BOOTCONFIG := \
+     androidboot.hardware=qcom \
+     androidboot.hypervisor.protected_vm.supported=0 \
+-    androidboot.load_modules_parallel=true \
++    androidboot.load_modules_parallel=false \
+     androidboot.memcg=1 \
+     androidboot.usbcontroller=a600000.dwc3 \
+     androidboot.vendor.qspa=true \
+-- 
+2.56.1
+

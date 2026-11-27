@@ -1,7 +1,7 @@
 From dc8d07065ac3638560e84666e704580002d2193b Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Wed, 25 Nov 2026 11:59:36 -0400
-Subject: [PATCH 7/8] sm8650-common: label odm libcamxexternalformatutils
+Subject: [PATCH 7/9] sm8650-common: label odm libcamxexternalformatutils
  SP-HAL and allow atfwd lseek
 
 - Label /(odm|vendor)/lib64/libcamxexternalformatutils.so as same_process_hal_file

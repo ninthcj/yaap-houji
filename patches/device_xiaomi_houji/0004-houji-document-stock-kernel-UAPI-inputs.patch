@@ -1,7 +1,7 @@
 From 9145f448e93e5abda1f4dc31e453bfdfddba12fa Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 16:37:45 -0400
-Subject: [PATCH 04/10] houji: document stock kernel UAPI inputs
+Subject: [PATCH 04/11] houji: document stock kernel UAPI inputs
 
 ---
  docs/dev/stock-kernel.md | 16 ++++++++--------

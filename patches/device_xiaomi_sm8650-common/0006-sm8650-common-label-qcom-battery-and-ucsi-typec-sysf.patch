@@ -1,7 +1,7 @@
 From e68abc335660bb083494ee61c06466a4ced3a7ed Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Tue, 24 Nov 2026 10:29:31 -0400
-Subject: [PATCH 6/8] sm8650-common: label qcom-battery and ucsi typec sysfs
+Subject: [PATCH 6/9] sm8650-common: label qcom-battery and ucsi typec sysfs
  for Xiaomi fastcharge auth
 
 ---

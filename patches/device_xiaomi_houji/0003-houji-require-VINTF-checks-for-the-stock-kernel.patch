@@ -1,7 +1,7 @@
 From 25ec80833ddbd44789e393b64f3b21544535dc07 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 15:21:03 -0400
-Subject: [PATCH 03/10] houji: require VINTF checks for the stock kernel
+Subject: [PATCH 03/11] houji: require VINTF checks for the stock kernel
 
 ---
  yaap_houji.mk | 2 ++

@@ -1,7 +1,7 @@
 From f7f2369e30302093ae5552892a33194fef3c6f50 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 17:41:57 -0400
-Subject: [PATCH 06/10] Document houji release app exclusions
+Subject: [PATCH 06/11] Document houji release app exclusions
 
 - Distinguish the carrier entitlement app from the required Qualcomm IMS implementation.
 ---

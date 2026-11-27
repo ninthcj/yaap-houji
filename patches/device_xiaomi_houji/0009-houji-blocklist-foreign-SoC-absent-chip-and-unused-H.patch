@@ -1,7 +1,7 @@
 From 59f3b727c04fc57cea973a1bf5fafa3a9e1c394a Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Wed, 25 Nov 2026 09:35:28 -0400
-Subject: [PATCH 09/10] houji: blocklist foreign-SoC, absent-chip, and unused
+Subject: [PATCH 09/11] houji: blocklist foreign-SoC, absent-chip, and unused
  HyperOS Ring-0 modules
 
 ---

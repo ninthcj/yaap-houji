@@ -1,8 +1,7 @@
 From 8f5b5070b6c246522cee8d52746ca597c59ff9d6 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 16:37:45 -0400
-Subject: [PATCH 1/2] build: use Bionic scheduler types in exported kernel
- headers
+Subject: [PATCH] build: use Bionic scheduler types in exported kernel headers
 
 Avoid a duplicate sched_param declaration from raw GKI headers and declare the sanitizer inputs in the generator.
 ---
@@ -59,3 +58,6 @@ index f3c47e9..bd94538 100755
 -    "$1/usr/include/linux/sched/types.h"
 +# Bionic's <sched.h> owns the POSIX sched_param declaration.
 +cp bionic/libc/kernel/uapi/linux/sched/types.h "$1/usr/include/linux/sched/types.h"
+-- 
+2.56.1
+

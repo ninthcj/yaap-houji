@@ -1,7 +1,7 @@
 From 6145a80b3993cfea7f10dbab93a5dcd1dbfeea99 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 15:21:03 -0400
-Subject: [PATCH 2/8] sm8650-common: match the YAAP vibrator selector type
+Subject: [PATCH 2/9] sm8650-common: match the YAAP vibrator selector type
 
 ---
  common.mk | 2 +-

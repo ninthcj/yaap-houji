@@ -1,7 +1,7 @@
 From 4495304940785eca3a9c41bba9d23afbf5d1184f Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 18:02:44 -0400
-Subject: [PATCH 4/8] Run Xiaomi variant property initialization on normal boot
+Subject: [PATCH 4/9] Run Xiaomi variant property initialization on normal boot
 
 - Link the same Xiaomi init implementation for Android second-stage init as for recovery.
 ---

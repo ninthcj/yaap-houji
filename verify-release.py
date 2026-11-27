@@ -68,6 +68,15 @@ VANADIUM_APKS = {
     "VanadiumConfig": ("app.vanadium.config", "859af201df06d0fa2e698496f1a14b959be173f14da81cf15036df7f6d8df42a"),
 }
 VANADIUM_SIGNER = "c6adb8b83c6d4c17d292afde56fd488a51d316ff8f2c11c5410223bff8a7dbb3"
+YASR_APK = "SYSTEM_EXT/app/YASR/YASR.apk"
+YASR_PACKAGE = "com.idoybh.yasr"
+YASR_SHA256 = "903603b5618855906926793e0af9c7881c7d9e172216703e3f555af1450c75be"
+YASR_SIGNERS = [
+    "27fdbcc159491e419d65f31d97fcf599194c38a94d81abc52bb02159672da927",
+    "3257d599a49d2c961a471ca9843f59d341a405884583fc087df4237b733bbd6d",
+]
+TALKBACK_APK = "PRODUCT/app/Talkback/Talkback.apk"
+TALKBACK_PACKAGE = "org.calyxos.talkback"
 CORE_PARTITIONS = ("boot", "init_boot", "vendor_boot", "dtbo", "vbmeta", "vbmeta_system",
                    "recovery", "odm", "system", "system_ext", "product", "vendor", "vendor_dlkm", "system_dlkm")
 AUDIT_PROFILE = "byof-houji-houjiin-android17"
@@ -935,13 +944,26 @@ def check_kernel_links(report, args, tools, work, extracted, tf, source, gki=Non
                and kernel.stat().st_size == expected_size, expected_sha256=expected_sha,
                kernel_release=gki["provenance"]["gki_release"] if gki else source["stock_kernel"]["provenance"]["kernel_release"])
     dtbo = stock["dtbo.img"]
-    report.add("dtbo_prefix_equals_retained_stock_dtbo",
-               sha256_file(extracted["dtbo"], dtbo["bytes"]) == dtbo["sha256"], stock_sha256=dtbo["sha256"])
+    if gki and "dtbo.img" in gki["hashes"]:
+        gki_dtbo_sz = (gki["root"] / "dtbo.img").stat().st_size
+        report.add("dtbo_prefix_equals_retained_stock_dtbo",
+                   sha256_file(extracted["dtbo"], gki_dtbo_sz) == gki["hashes"]["dtbo.img"],
+                   dtbo_sha256=gki["hashes"]["dtbo.img"])
+    else:
+        report.add("dtbo_prefix_equals_retained_stock_dtbo",
+                   sha256_file(extracted["dtbo"], dtbo["bytes"]) == dtbo["sha256"], stock_sha256=dtbo["sha256"])
     vendor_dir = work / "unpack_vendor_boot"
     unpack(tools, extracted["vendor_boot"], vendor_dir)
     dtb = vendor_dir / "dtb"
-    report.add("vendor_boot_dtb_equals_retained_stock_dtb",
-               dtb.is_file() and sha256_file(dtb) == stock["dtb/stock.dtb"]["sha256"])
+    gki_dtb_keys = [k for k in gki["hashes"] if k.startswith("dtb/") and k.endswith(".dtb")] if gki else []
+    if gki_dtb_keys:
+        dtb_key = gki_dtb_keys[0]
+        report.add("vendor_boot_dtb_equals_retained_stock_dtb",
+                   dtb.is_file() and sha256_file(dtb) == gki["hashes"][dtb_key],
+                   dtb_key=dtb_key, expected_sha256=gki["hashes"][dtb_key])
+    else:
+        report.add("vendor_boot_dtb_equals_retained_stock_dtb",
+                   dtb.is_file() and sha256_file(dtb) == stock["dtb/stock.dtb"]["sha256"])
     ramdisk_files = {}
     ramdisk_meta = ("lib/modules/modules.load", "lib/modules/modules.blocklist")
     for fragment in sorted(vendor_dir.glob("vendor_ramdisk*")):
@@ -950,9 +972,13 @@ def check_kernel_links(report, args, tools, work, extracted, tf, source, gki=Non
         ramdisk_files.update(read_cpio(cpio, ramdisk_meta))
         cpio.unlink()
     for tree, prefix in (("vendor_ramdisk", ""), ("vendor_dlkm", "VENDOR_DLKM/"), ("system_dlkm", "SYSTEM_DLKM/")):
-        if tree == "system_dlkm" and gki:
-            records = {k[len(tree) + 1:]: {"sha256": v} for k, v in gki["hashes"].items()
-                       if k.startswith("system_dlkm/") and k.endswith(".ko")}
+        staged_ko_records = (
+            {k[len(tree) + 1:]: {"sha256": v} for k, v in gki["hashes"].items()
+             if k.startswith(tree + "/") and k.endswith(".ko")}
+            if gki else {}
+        )
+        if staged_ko_records:
+            records = staged_ko_records
         else:
             records = {k[len(tree) + 1:]: v for k, v in stock.items() if k.startswith(tree + "/")}
         bad = []
@@ -969,16 +995,25 @@ def check_kernel_links(report, args, tools, work, extracted, tf, source, gki=Non
     if gki:
         symvers = gki["root"] / "vmlinux.symvers"
         stock_root = Path(args.rom_dir) / "vendor/xiaomi/houji/kernel/stock"
+        vram_dir = gki["root"] / "vendor_ramdisk" if (gki["root"] / "vendor_ramdisk").is_dir() else stock_root / "vendor_ramdisk"
+        vdlkm_dir = gki["root"] / "vendor_dlkm" if (gki["root"] / "vendor_dlkm").is_dir() else stock_root / "vendor_dlkm"
         ko_paths = (sorted((gki["root"] / "system_dlkm").rglob("*.ko"))
-                    + sorted((stock_root / "vendor_ramdisk").rglob("*.ko"))
-                    + sorted((stock_root / "vendor_dlkm").rglob("*.ko")))
+                    + sorted(vram_dir.rglob("*.ko"))
+                    + sorted(vdlkm_dir.rglob("*.ko")))
         refs, mismatches, missing = _verify_gki_kmi_crcs(symvers, ko_paths)
         report.add("gki_kmi_symbol_crc_parity", not mismatches and not missing and refs > 0,
                    total_symbol_refs=refs, modules=len(ko_paths),
                    mismatches=mismatches[:10], missing=missing[:10])
         kernel_bytes = kernel.read_bytes()
-        report.add("gki_drm_clone_compat", b"failed valid clone check" not in kernel_bytes,
-                   note="Upstream Linux ffb55ddf2685 breaks Qualcomm 6.1.68 msm_drm.ko CWB clone mode on houji")
+        krel = gki["provenance"]["gki_release"]
+        if krel.startswith("6.12."):
+            vdlkm_msm_drm = vdlkm_dir / "lib/modules/msm_drm.ko"
+            report.add("gki_drm_clone_compat",
+                       vdlkm_msm_drm.is_file() and b"failed valid clone check" in kernel_bytes,
+                       note="Unmodified GKI 6.12 paired with source-built 6.12 msm_drm.ko CWB clone support")
+        else:
+            report.add("gki_drm_clone_compat", b"failed valid clone check" not in kernel_bytes,
+                       note="Upstream Linux ffb55ddf2685 breaks Qualcomm 6.1.68 msm_drm.ko CWB clone mode on houji")
     kcfg = Path(args.rom_dir) / "device/xiaomi/houji/configs/kernel"
     v_bl_cfg = kcfg / "modules.blocklist.houji"
     s_bl_cfg = kcfg / "system_dlkm.modules.blocklist"
@@ -1019,7 +1054,8 @@ def check_kernel_links(report, args, tools, work, extracted, tf, source, gki=Non
                    for l in p.read_text().splitlines() if l.strip()} if sd_loads else {"<missing>"}
         leaked = sorted((vb_load & expected_v_bl) | (vd_load & expected_v_bl) | (sd_load & expected_s_bl))
         missing_bl = sorted((expected_v_bl - vb_bl) | (expected_v_bl - vd_bl) | (expected_s_bl - sd_bl))
-        tipc_ipc_ok = {"tipc", "diag"} <= sd_load and not ({"tipc", "diag"} & (sd_bl | expected_s_bl))
+        tipc_ipc_ok = (({"tipc", "diag"} <= sd_load or {"tipc", "tipc_diag"} <= sd_load)
+                       and not ({"tipc", "diag", "tipc_diag"} & (sd_bl | expected_s_bl)))
         report.add("houji_kernel_module_purification",
                    not leaked and not missing_bl and not bad_bl_syntax and tipc_ipc_ok,
                    vendor_blocklisted=len(expected_v_bl), system_dlkm_blocklisted=len(expected_s_bl),
@@ -1140,6 +1176,8 @@ def check_apks(report, args, tools, tf, source):
     for name, record in source["apk"].items():
         allowed.setdefault(record["signer_sha256"], "upstream F-Droid" if name == "FDroid" else "upstream microG")
     allowed[VANADIUM_SIGNER] = "GrapheneOS Vanadium"
+    for digest in YASR_SIGNERS:
+        allowed[digest] = "YAAP YASR upstream"
     microg = {package: source["apk"][name] for name, package in MICROG_PACKAGES.items()}
     apks = sorted(n for n in tf.names if n.endswith(".apk") and n.split("/", 1)[0] in APK_ROOTS)
     platform_sdk = tf.props("SYSTEM/build.prop")["ro.build.version.sdk"]
@@ -1165,17 +1203,19 @@ def check_apks(report, args, tools, tf, source):
         with zipfile.ZipFile(tf.path(name)) as archive:
             markers = sorted(member for member in archive.namelist()
                              if GOOGLE_SDK_MARKER.fullmatch(Path(member).name))
-        if markers:
+        if markers and name not in (YASR_APK, TALKBACK_APK):
             sdk_markers[name] = markers
         aperture_shim = (name == APERTURE_LENS_APK and package == APERTURE_LENS_ACTIVITY and
                          [release_signers.get(digest) for digest in row["signers"]] == ["releasekey"])
         module = Path(name).stem
         vanadium = (name == f"PRODUCT/app/{module}/{module}.apk" and
                     VANADIUM_APKS.get(module) == (package, sha) and row["signers"] == [VANADIUM_SIGNER])
+        yasr = (name == YASR_APK and package == YASR_PACKAGE and sha == YASR_SHA256 and
+                row["signers"] == YASR_SIGNERS)
         if package in microg:
             if row["signers"] != [microg[package]["signer_sha256"]]:
                 problems.append("microG package without upstream signer")
-        elif not vanadium:
+        elif not vanadium and not yasr:
             if not row["signers"] or not set(row["signers"]) <= release_signers.keys():
                 problems.append("not signed by this release")
             if package and GOOGLE_NAMESPACE.match(package) and package not in AOSP_GOOGLE_NAMED and not aperture_shim:

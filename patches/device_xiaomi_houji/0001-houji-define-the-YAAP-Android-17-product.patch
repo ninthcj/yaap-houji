@@ -1,7 +1,7 @@
 From fa70ee3fa6016c977c461e5dea99fbe6c53d513c Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 14:20:59 -0400
-Subject: [PATCH 01/10] houji: define the YAAP Android 17 product
+Subject: [PATCH 01/11] houji: define the YAAP Android 17 product
 
 Keep the CN stock kernel and vendor baseline while selecting YAAP system components, Aperture overlays, and OpenEUICC.
 Drop the Global-only Google eUICC policy overlay and use the actual YAAP build fingerprint.

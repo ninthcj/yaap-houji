@@ -1,7 +1,7 @@
 From 5d9af7f46a56f7c016f423b52000aa9a87212801 Mon Sep 17 00:00:00 2001
 From: ninthcj <327845320+ninthcj@users.noreply.github.com>
 Date: Mon, 23 Nov 2026 14:26:51 -0400
-Subject: [PATCH 1/8] sm8650-common: integrate YAAP Android 17 board support
+Subject: [PATCH 1/9] sm8650-common: integrate YAAP Android 17 board support
 
 Use YAAP audio, power, and framework matrix contracts while retaining the CN VINTF baseline.
 Sign the existing houji AVB chain with the same private AVB key instead of the AOSP test default.
