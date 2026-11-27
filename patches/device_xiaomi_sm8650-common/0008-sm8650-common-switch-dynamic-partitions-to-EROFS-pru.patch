@@ -1,0 +1,809 @@
+From db4f386102f117726ed17efd7d646a76ff2e4b0d Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 13:51:38 -0400
+Subject: [PATCH 8/8] sm8650-common: switch dynamic partitions to EROFS, prune
+ dead vendor daemons, wire 80% bypass charging, and clear HAL SELinux denials
+
+---
+ BoardConfigCommon.mk                          |   4 +-
+ common.mk                                     |  53 +++++-
+ configs/properties/system.prop                |   5 +-
+ configs/vintf/compatibility_matrix.xiaomi.xml |  59 -------
+ configs/vintf/manifest_xiaomi.xml             |  22 +--
+ parts/Android.bp                              |   1 +
+ parts/AndroidManifest.xml                     |  17 ++
+ parts/res/values-zh-rCN/strings.xml           |  14 ++
+ parts/res/values/strings.xml                  |   6 +
+ parts/res/xml/settings_charging_control.xml   |  18 ++
+ .../ChargingControlSettingsActivity.java      |  28 ++++
+ .../ChargingControlSettingsFragment.java      |  85 ++++++++++
+ rootdir/etc/init.target.rc                    | 157 ------------------
+ rootdir/etc/init.xiaomi.rc                    |  19 +++
+ sepolicy/vendor/hal_bluetooth.te              |   4 +-
+ sepolicy/vendor/hal_graphics_composer.te      |   1 +
+ sepolicy/vendor/hal_health_default.te         |   9 +
+ .../vendor/hal_lineage_powershare_default.te  |   3 +-
+ sepolicy/vendor/hal_misc_fixes.te             |   4 +
+ sepolicy/vendor/mediacodec.te                 |   1 +
+ sepolicy/vendor/property.te                   |   3 +
+ sepolicy/vendor/property_contexts             |   1 +
+ sepolicy/vendor/system_app.te                 |   1 +
+ 23 files changed, 266 insertions(+), 249 deletions(-)
+ create mode 100644 parts/res/values-zh-rCN/strings.xml
+ create mode 100644 parts/res/xml/settings_charging_control.xml
+ create mode 100644 parts/src/com/xiaomi/settings/battery/ChargingControlSettingsActivity.java
+ create mode 100644 parts/src/com/xiaomi/settings/battery/ChargingControlSettingsFragment.java
+ create mode 100644 sepolicy/vendor/hal_health_default.te
+ create mode 100644 sepolicy/vendor/hal_misc_fixes.te
+
+diff --git a/BoardConfigCommon.mk b/BoardConfigCommon.mk
+index 22ab711..f3a5bcf 100644
+--- a/BoardConfigCommon.mk
++++ b/BoardConfigCommon.mk
+@@ -118,8 +118,10 @@ BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST := odm product system system_dlkm sy
+ BOARD_QTI_DYNAMIC_PARTITIONS_SIZE := 8317304832
+ 
+ BOARD_PARTITION_LIST := $(call to-upper, $(BOARD_QTI_DYNAMIC_PARTITIONS_PARTITION_LIST))
+-$(foreach p, $(BOARD_PARTITION_LIST), $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := ext4))
++$(foreach p, $(BOARD_PARTITION_LIST), $(eval BOARD_$(p)IMAGE_FILE_SYSTEM_TYPE := erofs))
+ $(foreach p, $(BOARD_PARTITION_LIST), $(eval TARGET_COPY_OUT_$(p) := $(call to-lower, $(p))))
++BOARD_EROFS_PCLUSTER_SIZE := 4096
++BOARD_EROFS_SHARE_DUP_BLOCKS := true
+ 
+ # Platform
+ BOARD_USES_QCOM_HARDWARE := true
+diff --git a/common.mk b/common.mk
+index f852f9d..efa64d9 100644
+--- a/common.mk
++++ b/common.mk
+@@ -5,12 +5,51 @@
+ #
+ 
+ # Override stock atfwd seccomp policy lacking bionic lseek allowance
+-# (must precede inherit-product so first PRODUCT_COPY_FILES entry wins)
++# (must precede vendor include so first PRODUCT_COPY_FILES entry wins)
+ PRODUCT_COPY_FILES += \
+     device/xiaomi/sm8650-common/configs/seccomp/atfwd@2.0.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/atfwd@2.0.policy
+ 
+-# Call the proprietary setup.
+-$(call inherit-product, vendor/xiaomi/sm8650-common/sm8650-common-vendor.mk)
++# Include proprietary setup synchronously so unused HyperOS/payment/SLA daemons can be pruned cleanly.
++include vendor/xiaomi/sm8650-common/sm8650-common-vendor.mk
++
++# Prune orphaned proprietary payment/attestation, SLA, and touch-telemetry daemons with zero AOSP consumers.
++# Retain vendor.xiaomi.hardware.aidl.mtdservice-V1-ndk_platform for libGPQeSE.so ELF DT_NEEDED linkage.
++PRODUCT_PACKAGES := $(filter-out \
++    eid-default.xml \
++    fidoca \
++    libmfido \
++    libmlipay \
++    libmt \
++    libtida \
++    manifest_vendor.xiaomi.hardware.aidl.mtdservice.xml \
++    manifest_vendor.xiaomi.hardware.aidl.tidaservice.xml \
++    manifest_vendor.xiaomi.hardware.mfidoca.xml \
++    manifest_vendor.xiaomi.hardware.mlipay.xml \
++    mlipayd \
++    mtd \
++    slad \
++    tidad \
++    toucheventcheck \
++    vendor.qti.sla.service@1.0 \
++    vendor.qti.sla.service@1.0-impl \
++    vendor.qti.sla.service@1.0-service \
++    vendor.rongcard.eid-V1-ndk_platform \
++    vendor.rongcard.eid@1.0-service \
++    vendor.xiaomi.hardware.aidl.tidaservice-V1-ndk_platform \
++    vendor.xiaomi.hardware.mfidoca-V1-ndk_platform \
++    vendor.xiaomi.hardware.mlipay-V1-ndk_platform \
++    ,$(PRODUCT_PACKAGES))
++
++PRODUCT_COPY_FILES := $(filter-out \
++    vendor/xiaomi/sm8650-common/proprietary/odm/etc/init/vendor.xiaomi.hardware.aidl.mtdservice-service.rc:$(TARGET_COPY_OUT_ODM)/etc/init/vendor.xiaomi.hardware.aidl.mtdservice-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/odm/etc/init/vendor.xiaomi.hardware.aidl.tidaservice-service.rc:$(TARGET_COPY_OUT_ODM)/etc/init/vendor.xiaomi.hardware.aidl.tidaservice-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/odm/etc/init/vendor.xiaomi.hardware.mfidoca-service.rc:$(TARGET_COPY_OUT_ODM)/etc/init/vendor.xiaomi.hardware.mfidoca-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/odm/etc/init/vendor.xiaomi.hardware.mlipay-service.rc:$(TARGET_COPY_OUT_ODM)/etc/init/vendor.xiaomi.hardware.mlipay-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/vendor/etc/init/slad.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/slad.rc \
++    vendor/xiaomi/sm8650-common/proprietary/vendor/etc/init/vendor.qti.sla.service@1.0-service.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/vendor.qti.sla.service@1.0-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/vendor/etc/init/vendor.rongcard.eid@1.0-service.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/vendor.rongcard.eid@1.0-service.rc \
++    vendor/xiaomi/sm8650-common/proprietary/vendor/etc/sla/slad.conf:$(TARGET_COPY_OUT_VENDOR)/etc/sla/slad.conf \
++    ,$(PRODUCT_COPY_FILES))
+ 
+ # Enable virtual AB with vendor ramdisk
+ $(call inherit-product, $(SRC_TARGET_DIR)/product/virtual_ab_ota/vabc_features.mk)
+@@ -42,13 +81,13 @@ PRODUCT_AAPT_PREF_CONFIG := xxhdpi
+ AB_OTA_POSTINSTALL_CONFIG += \
+     RUN_POSTINSTALL_system=true \
+     POSTINSTALL_PATH_system=system/bin/otapreopt_script \
+-    FILESYSTEM_TYPE_system=ext4 \
++    FILESYSTEM_TYPE_system=erofs \
+     POSTINSTALL_OPTIONAL_system=true
+ 
+ AB_OTA_POSTINSTALL_CONFIG += \
+     RUN_POSTINSTALL_vendor=true \
+     POSTINSTALL_PATH_vendor=bin/checkpoint_gc \
+-    FILESYSTEM_TYPE_vendor=ext4 \
++    FILESYSTEM_TYPE_vendor=erofs \
+     POSTINSTALL_OPTIONAL_vendor=true
+ 
+ PRODUCT_PACKAGES += \
+@@ -195,8 +234,8 @@ PRODUCT_COPY_FILES += \
+ 
+ # Health
+ PRODUCT_PACKAGES += \
+-    android.hardware.health-service.qti \
+-    android.hardware.health-service.qti_recovery
++    android.hardware.health-service.xiaomi \
++    android.hardware.health-service.xiaomi_recovery
+ 
+ # IPACM
+ PRODUCT_PACKAGES += \
+diff --git a/configs/properties/system.prop b/configs/properties/system.prop
+index 3f081b2..ba45093 100644
+--- a/configs/properties/system.prop
++++ b/configs/properties/system.prop
+@@ -22,7 +22,7 @@ persist.radio.is_vonr_enabled_1=true
+ persist.vendor.sensors.enable.mag_filter=true
+ 
+ # SSR
+-persist.vendor.ssr.enable_ramdumps=1
++persist.vendor.ssr.enable_ramdumps=0
+ 
+ # WiFi display
+ persist.debug.wfd.enable=1
+@@ -34,5 +34,6 @@ ro.hardware.wlan.dbs=2
+ ro.hardware.wlan.mimo=1
+ ro.hardware.wlan.vendor=qcom
+ 
+-# Zygote
++# Zygote & MGLRU
+ persist.device_config.runtime_native.usap_pool_enabled=true
++persist.device_config.mglru_native.lru_gen_config=all
+diff --git a/configs/vintf/compatibility_matrix.xiaomi.xml b/configs/vintf/compatibility_matrix.xiaomi.xml
+index ddf5a9f..13b0fd8 100644
+--- a/configs/vintf/compatibility_matrix.xiaomi.xml
++++ b/configs/vintf/compatibility_matrix.xiaomi.xml
+@@ -43,35 +43,6 @@
+             <instance>default</instance>
+         </interface>
+     </hal>
+-    <hal format="hidl" optional="true">
+-        <name>vendor.qti.sla.service</name>
+-        <version>1.0</version>
+-        <interface>
+-            <name>ISlaService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="aidl" optional="true">
+-        <name>vendor.rongcard.eid</name>
+-        <interface>
+-            <name>IEidDeviceAidl</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="aidl" optional="true">
+-        <name>vendor.xiaomi.hardware.aidl.mtdservice</name>
+-        <interface>
+-            <name>IMTService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="aidl" optional="true">
+-        <name>vendor.xiaomi.hardware.aidl.tidaservice</name>
+-        <interface>
+-            <name>ITidaService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+     <hal format="aidl" optional="true">
+         <name>vendor.xiaomi.hardware.aidlbgservice</name>
+         <interface>
+@@ -123,20 +94,6 @@
+             <instance>default</instance>
+         </interface>
+     </hal>
+-    <hal format="aidl" optional="true">
+-        <name>vendor.xiaomi.hardware.mfidoca</name>
+-        <interface>
+-            <name>IFidoService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="aidl" optional="true">
+-        <name>vendor.xiaomi.hardware.mlipay</name>
+-        <interface>
+-            <name>IMlipayService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+     <hal format="aidl" optional="true">
+         <name>vendor.xiaomi.hardware.quickcamera</name>
+         <interface>
+@@ -144,22 +101,6 @@
+             <instance>default</instance>
+         </interface>
+     </hal>
+-    <hal format="hidl" optional="true">
+-        <name>vendor.xiaomi.hidl.minet</name>
+-        <version>1.0</version>
+-        <interface>
+-            <name>IMiNetService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+-    <hal format="hidl" optional="true">
+-        <name>vendor.xiaomi.hidl.miwill</name>
+-        <version>1.0</version>
+-        <interface>
+-            <name>IMiwillService</name>
+-            <instance>default</instance>
+-        </interface>
+-    </hal>
+     <hal format="aidl" optional="true">
+         <name>vendor.xiaomi.hw.touchfeature</name>
+         <interface>
+diff --git a/configs/vintf/manifest_xiaomi.xml b/configs/vintf/manifest_xiaomi.xml
+index 2980b35..2df8a79 100644
+--- a/configs/vintf/manifest_xiaomi.xml
++++ b/configs/vintf/manifest_xiaomi.xml
+@@ -1,27 +1,7 @@
+ <manifest version="7.0" type="device" target-level="8">
+-    <hal format="hidl">
+-        <name>vendor.qti.sla.service</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::ISlaService/default</fqname>
+-    </hal>
+     <hal format="hidl">
+         <name>vendor.xiaomi.hardware.bgservice</name>
+         <transport>hwbinder</transport>
+         <fqname>@1.0::IBGService/default</fqname>
+     </hal>
+-    <hal format="hidl">
+-        <name>vendor.xiaomi.hidl.minet</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IMiNetService/default</fqname>
+-    </hal>
+-    <hal format="hidl">
+-        <name>vendor.xiaomi.hidl.miwill</name>
+-        <transport>hwbinder</transport>
+-        <fqname>@1.0::IMiwillService/default</fqname>
+-    </hal>
+-    <!-- <hal format="aidl">
+-        <name>android.hardware.contexthub</name>
+-        <version>2</version>
+-        <fqname>IContextHub/default</fqname>
+-    </hal> -->
+-</manifest>
+\ No newline at end of file
++</manifest>
+diff --git a/parts/Android.bp b/parts/Android.bp
+index c85c6ca..dea733f 100644
+--- a/parts/Android.bp
++++ b/parts/Android.bp
+@@ -12,6 +12,7 @@ android_app {
+     privileged: true,
+     system_ext_specific: true,
+     static_libs: [
++        "android.hardware.health-V5-java",
+         "androidx.core_core",
+         "androidx.preference_preference",
+         "org.lineageos.settings.resources",
+diff --git a/parts/AndroidManifest.xml b/parts/AndroidManifest.xml
+index 9122165..2911234 100644
+--- a/parts/AndroidManifest.xml
++++ b/parts/AndroidManifest.xml
+@@ -49,6 +49,23 @@
+                 android:value="@string/edgesuppression_summary" />
+         </activity>
+ 
++        <activity
++            android:name=".battery.ChargingControlSettingsActivity"
++            android:configChanges="orientation|screenSize"
++            android:exported="true"
++            android:label="@string/charging_control_title"
++            android:theme="@style/Theme.SubSettingsBase">
++            <intent-filter>
++                <action android:name="com.android.settings.action.IA_SETTINGS" />
++            </intent-filter>
++            <meta-data
++                android:name="com.android.settings.category"
++                android:value="com.android.settings.category.ia.battery" />
++            <meta-data
++                android:name="com.android.settings.summary"
++                android:value="@string/charging_control_summary" />
++        </activity>
++
+         <service
+             android:name=".display.ColorModeService"
+             android:permission="ColorModeService">
+diff --git a/parts/res/values-zh-rCN/strings.xml b/parts/res/values-zh-rCN/strings.xml
+new file mode 100644
+index 0000000..9d2a2e6
+--- /dev/null
++++ b/parts/res/values-zh-rCN/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="edgesuppression_name">边缘防误触</string>
++    <string name="edgesuppression_summary">调节屏幕边缘防误触响应区域宽度</string>
++    <string name="edgesuppression_enable_name">启用边缘防误触</string>
++
++    <string name="charging_control_title">80% 充电保护（旁路供电）</string>
++    <string name="charging_control_summary">充至 80% 自动停充并切换为电源直供</string>
++    <string name="charging_control_enable_title">启用 80% 充电上限与旁路供电</string>
++    <string name="charging_control_footer" formatted="false">开启后，电源管理芯片在电量达到 80% 时停止向电池充电，改由适配器直接为整机供电（旁路供电，不断开电源连接），仅在电量跌至 75% 及以下时恢复补电，有效降低满电高压与插电发热损耗。</string>
++</resources>
+diff --git a/parts/res/values/strings.xml b/parts/res/values/strings.xml
+index c2bbd19..4d1fdae 100644
+--- a/parts/res/values/strings.xml
++++ b/parts/res/values/strings.xml
+@@ -9,4 +9,10 @@
+     <string name="edgesuppression_name">Edge rejection</string>
+     <string name="edgesuppression_summary">Set ignore accidental touch area for curved edges</string>
+     <string name="edgesuppression_enable_name">Enable edge rejection</string>
++
++    <!-- 80% Charging Protection / Bypass Charging -->
++    <string name="charging_control_title">Charging protection (80% bypass)</string>
++    <string name="charging_control_summary">Pause battery charging at 80% and power phone directly from adapter</string>
++    <string name="charging_control_enable_title">Limit charge to 80% with bypass power</string>
++    <string name="charging_control_footer" formatted="false">When enabled, the PMIC holds charge at 80% and powers the system directly from the charger without disconnecting USB power, resuming battery charge only below 75%.</string>
+ </resources>
+diff --git a/parts/res/xml/settings_charging_control.xml b/parts/res/xml/settings_charging_control.xml
+new file mode 100644
+index 0000000..08aa0cb
+--- /dev/null
++++ b/parts/res/xml/settings_charging_control.xml
+@@ -0,0 +1,18 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-License-Identifier: Apache-2.0
++-->
++<PreferenceScreen
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:title="@string/charging_control_title">
++
++    <com.android.settingslib.widget.MainSwitchPreference
++        android:key="charging_control_enable"
++        android:title="@string/charging_control_enable_title" />
++
++    <Preference
++        android:key="charging_control_footer"
++        android:summary="@string/charging_control_footer"
++        android:selectable="false" />
++
++</PreferenceScreen>
+diff --git a/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsActivity.java b/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsActivity.java
+new file mode 100644
+index 0000000..39ccfa3
+--- /dev/null
++++ b/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsActivity.java
+@@ -0,0 +1,28 @@
++/*
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.settings.battery;
++
++import android.app.Fragment;
++import android.os.Bundle;
++
++import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity;
++import com.android.settingslib.collapsingtoolbar.R;
++
++public class ChargingControlSettingsActivity extends CollapsingToolbarBaseActivity {
++
++    private static final String TAG = "charging_control";
++
++    @Override
++    protected void onCreate(Bundle savedInstanceState) {
++        super.onCreate(savedInstanceState);
++
++        Fragment fragment = getFragmentManager().findFragmentById(R.id.content_frame);
++        if (fragment == null) {
++            getFragmentManager().beginTransaction()
++                    .add(R.id.content_frame, new ChargingControlSettingsFragment(), TAG)
++                    .commit();
++        }
++    }
++}
+diff --git a/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsFragment.java b/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsFragment.java
+new file mode 100644
+index 0000000..930157b
+--- /dev/null
++++ b/parts/src/com/xiaomi/settings/battery/ChargingControlSettingsFragment.java
+@@ -0,0 +1,85 @@
++/*
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.settings.battery;
++
++import android.hardware.health.BatteryChargingPolicy;
++import android.hardware.health.IHealth;
++import android.os.Binder;
++import android.os.Bundle;
++import android.os.IBinder;
++import android.os.ServiceManager;
++import android.util.Log;
++import android.widget.CompoundButton;
++
++import androidx.preference.PreferenceFragment;
++
++import com.android.settingslib.widget.MainSwitchPreference;
++import com.xiaomi.settings.R;
++
++public class ChargingControlSettingsFragment extends PreferenceFragment
++        implements CompoundButton.OnCheckedChangeListener {
++
++    private static final String TAG = "XiaomiPartsChargingControl";
++    private static final String HEALTH_FQNAME = IHealth.DESCRIPTOR + "/default";
++
++    private MainSwitchPreference mSwitchBar;
++    private IHealth mHealthService;
++
++    @Override
++    public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
++        addPreferencesFromResource(R.xml.settings_charging_control);
++
++        mSwitchBar = (MainSwitchPreference) findPreference("charging_control_enable");
++        if (mSwitchBar != null) {
++            boolean enabled = isLongLifeEnabled();
++            mSwitchBar.setChecked(enabled);
++            mSwitchBar.addOnSwitchChangeListener(this);
++        }
++    }
++
++    @Override
++    public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
++        setLongLifeEnabled(isChecked);
++    }
++
++    private IHealth getHealthService() {
++        if (mHealthService == null) {
++            try {
++                IBinder binder = Binder.allowBlocking(
++                        ServiceManager.waitForDeclaredService(HEALTH_FQNAME));
++                if (binder != null) {
++                    mHealthService = IHealth.Stub.asInterface(binder);
++                }
++            } catch (Exception e) {
++                Log.e(TAG, "Failed to bind IHealth service", e);
++            }
++        }
++        return mHealthService;
++    }
++
++    private boolean isLongLifeEnabled() {
++        try {
++            IHealth health = getHealthService();
++            if (health != null) {
++                return health.getChargingPolicy() == BatteryChargingPolicy.LONG_LIFE;
++            }
++        } catch (Exception e) {
++            Log.e(TAG, "Failed to read charging policy", e);
++        }
++        return false;
++    }
++
++    private void setLongLifeEnabled(boolean enable) {
++        try {
++            IHealth health = getHealthService();
++            if (health != null) {
++                health.setChargingPolicy(
++                        enable ? BatteryChargingPolicy.LONG_LIFE : BatteryChargingPolicy.DEFAULT);
++            }
++        } catch (Exception e) {
++            Log.e(TAG, "Failed to set charging policy", e);
++        }
++    }
++}
+diff --git a/rootdir/etc/init.target.rc b/rootdir/etc/init.target.rc
+index 4195695..be06f27 100644
+--- a/rootdir/etc/init.target.rc
++++ b/rootdir/etc/init.target.rc
+@@ -131,163 +131,6 @@ on late-fs
+     mount_all /vendor/etc/fstab.qcom --late
+ 
+ on post-fs-data
+-    chmod 0666 /dev/migt
+-    restorecon /dev/migt
+-    chmod 0777 /sys/module/migt/parameters/migt_freq
+-    restorecon /sys/module/migt/parameters/migt_freq
+-    chmod 0777 /sys/module/migt/parameters/migt_ms
+-    restorecon /sys/module/migt/parameters/migt_ms
+-    chmod 0777 /sys/module/migt/parameters/migt_thresh
+-    restorecon /sys/module/migt/parameters/migt_thresh
+-    chmod 0777 /sys/module/migt/parameters/boost_policy
+-    restorecon /sys/module/migt/parameters/boost_policy
+-    chmod 0777 /sys/module/migt/parameters/fps_variance_ratio
+-    restorecon /sys/module/migt/parameters/fps_variance_ratio
+-    chmod 0777 /sys/module/migt/parameters/super_task_max_num
+-    restorecon /sys/module/migt/parameters/super_task_max_num
+-    chmod 0777 /sys/module/migt/parameters/migt_ceiling_freq
+-    restorecon /sys/module/migt/parameters/migt_ceiling_freq
+-    chmod 0777 /sys/module/migt/parameters/stask_candidate_num
+-    restorecon /sys/module/migt/parameters/stask_candidate_num
+-    chmod 0666 /sys/module/migt/parameters/glk_disable
+-    restorecon /sys/module/migt/parameters/glk_disable
+-    chmod 0666 /sys/module/migt/parameters/glk_fbreak_enable
+-    restorecon /sys/module/migt/parameters/glk_fbreak_enable
+-    chmod 0666 /sys/module/migt/parameters/glk_freq_limit_walt
+-    restorecon /sys/module/migt/parameters/glk_freq_limit_walt
+-    chmod 0666 /sys/module/migt/parameters/glk_minfreq
+-    restorecon /sys/module/migt/parameters/glk_minfreq
+-    chmod 0666 /sys/module/migt/parameters/glk_maxfreq
+-    restorecon /sys/module/migt/parameters/glk_maxfreq
+-    chmod 0666 /sys/module/migt/parameters/force_stask_to_big
+-    restorecon /sys/module/migt/parameters/force_stask_to_big
+-    chmod 0666 /sys/module/migt/parameters/force_reset_runtime
+-    restorecon /sys/module/migt/parameters/force_reset_runtime
+-    chmod 0777 /sys/module/metis/parameters/minor_window_app
+-    restorecon /sys/module/metis/parameters/minor_window_app
+-    chmod 0666 /sys/module/migt/parameters/mi_viptask
+-    restorecon /sys/module/migt/parameters/mi_viptask
+-    chmod 0666 /sys/module/migt/parameters/mi_freq_enable
+-    restorecon /sys/module/migt/parameters/mi_freq_enable
+-
+-    chmod 0666 /dev/metis
+-    restorecon /dev/metis
+-    chown 0666 /sys/module/metis/parameters
+-    chmod 0664 /sys/module/metis/parameters/add_rebind_task_lit
+-    chmod 0664 /sys/module/metis/parameters/add_rebind_task_mid
+-    chmod 0664 /sys/module/metis/parameters/add_rebind_task_big
+-    chmod 0664 /sys/module/metis/parameters/del_rebind_task_lit
+-    chmod 0664 /sys/module/metis/parameters/del_rebind_task_mid
+-    chmod 0664 /sys/module/metis/parameters/del_rebind_task_big
+-    chmod 0664 /sys/module/metis/parameters/add_lclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/del_lclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/add_mclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/del_mclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/add_bclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/del_bclus_affinity_uidlist
+-    chmod 0664 /sys/module/metis/parameters/reset_clus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters
+-    chown root system /sys/module/metis/parameters/add_rebind_task_lit
+-    chown root system /sys/module/metis/parameters/add_rebind_task_mid
+-    chown root system /sys/module/metis/parameters/add_rebind_task_big
+-    chown root system /sys/module/metis/parameters/del_rebind_task_lit
+-    chown root system /sys/module/metis/parameters/del_rebind_task_mid
+-    chown root system /sys/module/metis/parameters/del_rebind_task_big
+-    chown root system /sys/module/metis/parameters/add_lclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/del_lclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/add_mclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/del_mclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/add_bclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/del_bclus_affinity_uidlist
+-    chown root system /sys/module/metis/parameters/reset_clus_affinity_uidlist
+-
+-    chmod 0666 /dev/metis
+-    restorecon /dev/metis
+-    chmod 0666 /sys/module/metis/parameters/mi_viptask
+-    restorecon /sys/module/metis/parameters/mi_viptask
+-    chmod 0666 /sys/module/metis/parameters/mi_viptask_balance
+-    restorecon /sys/module/metis/parameters/mi_viptask_balance
+-    chmod 0666 /sys/module/metis/parameters/metis_schlat_enable
+-    restorecon /sys/module/metis/parameters/metis_schlat_enable
+-    chmod 0666 /sys/module/metis/parameters/mi_boost_duration
+-    restorecon /sys/module/metis/parameters/mi_boost_duration
+-    chmod 0666 /sys/class/thermal/thermal_message/boost
+-    restorecon /sys/class/thermal/thermal_message/boost
+-    chmod 0666 /sys/module/metis/parameters/vip_link_enable
+-    restorecon /sys/module/metis/parameters/vip_link_enable
+-    chmod 0666 /sys/module/metis/parameters/vip_link_async_binder
+-    restorecon /sys/module/metis/parameters/vip_link_async_binder
+-    chmod 0666 /sys/module/metis/parameters/mi_fboost_enable
+-    restorecon /sys/module/metis/parameters/mi_fboost_enable
+-    chmod 0666 /sys/module/metis/parameters/add_mi_viptask_enqueue_boost
+-    restorecon /sys/module/metis/parameters/add_mi_viptask_enqueue_boost
+-    chmod 0666 /sys/module/metis/parameters/del_mi_viptask_enqueue_boost
+-    restorecon /sys/module/metis/parameters/del_mi_viptask_enqueue_boost
+-    chmod 0666 /sys/module/metis/parameters/add_mi_viptask_sched_priority
+-    restorecon /sys/module/metis/parameters/add_mi_viptask_sched_priority
+-    chmod 0666 /sys/module/metis/parameters/del_mi_viptask_sched_priority
+-    restorecon /sys/module/metis/parameters/del_mi_viptask_sched_priority
+-    chmod 0666 /sys/module/metis/parameters/add_mi_viptask_sched_lit_core
+-    restorecon /sys/module/metis/parameters/add_mi_viptask_sched_lit_core
+-    chmod 0666 /sys/module/metis/parameters/del_mi_viptask_sched_lit_core
+-    restorecon /sys/module/metis/parameters/del_mi_viptask_sched_lit_core
+-    chmod 0666 /sys/module/metis/parameters/is_break_enable
+-    restorecon /sys/module/metis/parameters/is_break_enable
+-    chmod 0666 /sys/module/metis/parameters/cold_start_app_tgid
+-    restorecon /sys/module/metis/parameters/cold_start_app_tgid
+-    chmod 0666 /sys/module/metis/parameters/metis_wakeup_enable
+-    restorecon /sys/module/metis/parameters/metis_wakeup_enable
+-    chmod 0666 /sys/module/metis/parameters/metis_wakeup_task
+-    restorecon /sys/module/metis/parameters/metis_wakeup_task
+-    chmod 0666 /sys/module/metis/parameters/protect_cs
+-    restorecon /sys/module/metis/parameters/protect_cs
+-    chmod 0666 /sys/module/metis/parameters/trace_motion_event
+-    restorecon /sys/module/metis/parameters/trace_motion_event
+-    chown root system /sys/module/metis/parameters/trace_motion_event
+-    chmod 0666 /sys/module/metis/parameters/common_persist_vip_task
+-    restorecon /sys/module/metis/parameters/common_persist_vip_task
+-    chmod 0666 /sys/module/metis/parameters/clear_persist_vip_task
+-    restorecon /sys/module/metis/parameters/clear_persist_vip_task
+-
+-    chmod 0666 /dev/metis_link
+-    restorecon /dev/metis_link
+-    chmod 0666 /sys/module/metis/parameters/mi_lock_blocked_pid
+-    restorecon /sys/module/metis/parameters/mi_lock_blocked_pid
+-
+-    chmod 0666 /sys/module/metis/parameters/stask_prefer_cluster
+-    restorecon /sys/module/metis/parameters/stask_prefer_cluster
+-    chmod 0666 /sys/module/metis/parameters/render_prefer_cluster
+-    restorecon /sys/module/metis/parameters/render_prefer_cluster
+-    chmod 0666 /sys/module/metis/parameters/vip_prefer_cluster
+-    restorecon /sys/module/metis/parameters/vip_prefer_cluster
+-    chmod 0666 /sys/module/metis/parameters/ip_prefer_cluster
+-    restorecon /sys/module/metis/parameters/ip_prefer_cluster
+-    chmod 0666 /sys/module/metis/parameters/force_forbidden_walt_lb
+-    restorecon /sys/module/metis/parameters/force_forbidden_walt_lb
+-    chmod 0666 /sys/module/metis/parameters/force_viptask_select_rq
+-    restorecon /sys/module/metis/parameters/force_viptask_select_rq
+-    chmod 0666 /sys/module/metis/parameters/force_cluster_sched_enable
+-    restorecon /sys/module/metis/parameters/force_cluster_sched_enable
+-
+-    chmod 0666 /sys/module/speed_touch/parameters/speed_touch_enable
+-    restorecon /sys/module/speed_touch/parameters/speed_touch_enable
+-    chown root system /sys/module/speed_touch/parameters/speed_touch_enable
+-    chmod 0666 /sys/module/speed_touch/parameters/cur_layer_name
+-    restorecon /sys/module/speed_touch/parameters/cur_layer_name
+-    chown root system /sys/module/speed_touch/parameters/cur_layer_name
+-    chmod 0666 /sys/module/speed_touch/parameters/sf_available_buffer_size
+-    restorecon /sys/module/speed_touch/parameters/sf_available_buffer_size
+-    chown root system /sys/module/speed_touch/parameters/sf_available_buffer_size
+-    chmod 0666 /sys/module/speed_touch/parameters/track_vsync_signal
+-    restorecon /sys/module/speed_touch/parameters/track_vsync_signal
+-    chown root system /sys/module/speed_touch/parameters/track_vsync_signal
+-    chmod 0666 /sys/module/speed_touch/parameters/vsync_period
+-    restorecon /sys/module/speed_touch/parameters/vsync_period
+-    chown root system /sys/module/speed_touch/parameters/vsync_period
+-    chmod 0666 /sys/module/metis/parameters/speed_touch_enable
+-    restorecon /sys/module/metis/parameters/speed_touch_enable
+-    chown root system /sys/module/metis/parameters/speed_touch_enable
+-
+     mkdir /vendor/data/tombstones 0771 system system
+     # add wlan log output path
+     mkdir /data/vendor/wlan_logs 0777 root shell
+diff --git a/rootdir/etc/init.xiaomi.rc b/rootdir/etc/init.xiaomi.rc
+index f1cf2c3..ed6e56f 100644
+--- a/rootdir/etc/init.xiaomi.rc
++++ b/rootdir/etc/init.xiaomi.rc
+@@ -3,6 +3,16 @@ on early-boot
+     chmod 0664 /sys/bus/platform/devices/soc:xiaomi_fingerprint/fingerdown
+ 
+ on boot
++    # Xiaomi PMIC PowerShare, hardware bypass charging, and battery SOH
++    chown system system /sys/class/qcom-battery/reverse_chg_mode
++    chmod 0664 /sys/class/qcom-battery/reverse_chg_mode
++    chown system system /sys/class/qcom-battery/night_charging
++    chmod 0664 /sys/class/qcom-battery/night_charging
++    chown system system /sys/class/qcom-battery/ui_soh
++    chmod 0444 /sys/class/qcom-battery/ui_soh
++    chown system system /sys/class/qcom-battery/soh
++    chmod 0444 /sys/class/qcom-battery/soh
++
+     # Xiaomi touch
+     chown system system /dev/xiaomi-touch
+     chmod 0660 /dev/xiaomi-touch
+@@ -62,6 +72,15 @@ on property:vendor.post_boot.parsed=1
+     # Set default thermal profile
+     write /sys/class/thermal/thermal_message/sconfig 0
+ 
++# Mask orphaned HyperOS touch-telemetry oneshot declared in odm touchfeature rc
++service toucheventcheck /system/bin/true
++    override
++    class main
++    user system
++    group system
++    disabled
++    oneshot
++
+ service vendor.audio-hal /vendor/bin/hw/android.hardware.audio.service
+     override
+     class hal
+diff --git a/sepolicy/vendor/hal_bluetooth.te b/sepolicy/vendor/hal_bluetooth.te
+index 1e0364a..b317c46 100644
+--- a/sepolicy/vendor/hal_bluetooth.te
++++ b/sepolicy/vendor/hal_bluetooth.te
+@@ -1,2 +1,4 @@
+ allow hal_bluetooth_default vendor_mac_vendor_data_file:dir r_dir_perms;
+-allow hal_bluetooth_default vendor_mac_vendor_data_file:file r_file_perms;
+\ No newline at end of file
++allow hal_bluetooth_default vendor_mac_vendor_data_file:file r_file_perms;
++allow hal_bluetooth_default vendor_bt_data_file:dir create_dir_perms;
++allow hal_bluetooth_default vendor_bt_data_file:file create_file_perms;
+\ No newline at end of file
+diff --git a/sepolicy/vendor/hal_graphics_composer.te b/sepolicy/vendor/hal_graphics_composer.te
+index 0ccb830..02e5024 100644
+--- a/sepolicy/vendor/hal_graphics_composer.te
++++ b/sepolicy/vendor/hal_graphics_composer.te
+@@ -10,5 +10,6 @@ add_service(hal_graphics_composer_default, vendor_mistcdisplay_service)
+ add_service(hal_graphics_composer_default, vendor_miclstc_service)
+ 
+ get_prop(hal_graphics_composer_default, vendor_displayfeature_prop)
++dontaudit hal_graphics_composer_default system_prop:file read;
+ 
+ hal_client_domain(hal_graphics_composer_default, vendor_hal_displayfeature_xiaomi)
+\ No newline at end of file
+diff --git a/sepolicy/vendor/hal_health_default.te b/sepolicy/vendor/hal_health_default.te
+new file mode 100644
+index 0000000..7e8652f
+--- /dev/null
++++ b/sepolicy/vendor/hal_health_default.te
+@@ -0,0 +1,9 @@
++set_prop(hal_health_default, vendor_charge_prop)
++allow hal_health_default vendor_sysfs_battery_supply:dir r_dir_perms;
++allow hal_health_default vendor_sysfs_battery_supply:file rw_file_perms;
++allow hal_health_default vendor_sysfs_battery_supply:lnk_file r_file_perms;
++
++get_prop(charger_vendor, vendor_charge_prop)
++allow charger_vendor vendor_sysfs_battery_supply:dir r_dir_perms;
++allow charger_vendor vendor_sysfs_battery_supply:file rw_file_perms;
++allow charger_vendor vendor_sysfs_battery_supply:lnk_file r_file_perms;
+diff --git a/sepolicy/vendor/hal_lineage_powershare_default.te b/sepolicy/vendor/hal_lineage_powershare_default.te
+index e591663..86b3b86 100644
+--- a/sepolicy/vendor/hal_lineage_powershare_default.te
++++ b/sepolicy/vendor/hal_lineage_powershare_default.te
+@@ -1,2 +1,3 @@
+-allow hal_lineage_powershare_default vendor_sysfs_battery_supply:dir search;
++allow hal_lineage_powershare_default vendor_sysfs_battery_supply:dir r_dir_perms;
+ allow hal_lineage_powershare_default vendor_sysfs_battery_supply:file rw_file_perms;
++allow hal_lineage_powershare_default vendor_sysfs_battery_supply:lnk_file r_file_perms;
+diff --git a/sepolicy/vendor/hal_misc_fixes.te b/sepolicy/vendor/hal_misc_fixes.te
+new file mode 100644
+index 0000000..0759927
+--- /dev/null
++++ b/sepolicy/vendor/hal_misc_fixes.te
+@@ -0,0 +1,4 @@
++r_dir_file(vendor_wcnss_service, vendor_mac_vendor_data_file)
++get_prop(vendor_hal_gnss_qti, vendor_sensors_prop)
++get_prop(rild, vendor_pd_locater_dbg_prop)
++dontaudit rild default_prop:file read;
+diff --git a/sepolicy/vendor/mediacodec.te b/sepolicy/vendor/mediacodec.te
+index 4c738c0..bddc576 100644
+--- a/sepolicy/vendor/mediacodec.te
++++ b/sepolicy/vendor/mediacodec.te
+@@ -2,3 +2,4 @@
+ allow mediacodec hal_dms_hwservice:hwservice_manager find;
+ hal_client_domain(mediacodec, hal_dms)
+ get_prop(mediacodec, graphics_config_prop)
++get_prop(mediacodec, vendor_display_prop)
+diff --git a/sepolicy/vendor/property.te b/sepolicy/vendor/property.te
+index 8c06ff0..4468042 100644
+--- a/sepolicy/vendor/property.te
++++ b/sepolicy/vendor/property.te
+@@ -28,3 +28,6 @@ vendor_restricted_prop(vendor_panel_info_prop)
+ # Touchfeature
+ vendor_restricted_prop(vendor_touchfeature_prop)
+ vendor_restricted_prop(vendor_touch_hostprocess_prop)
++
++# Battery charging policy (stored in /data/property on userdata)
++vendor_internal_prop(vendor_charge_prop)
+diff --git a/sepolicy/vendor/property_contexts b/sepolicy/vendor/property_contexts
+index 214acb9..7e41bf5 100644
+--- a/sepolicy/vendor/property_contexts
++++ b/sepolicy/vendor/property_contexts
+@@ -1,4 +1,5 @@
+ # Camera
++persist.vendor.charge.policy                    u:object_r:vendor_charge_prop:s0
+ persist.vendor.aiie_capture_log.debug           u:object_r:vendor_camera_prop:s0
+ vendor.camera.sensor.                           u:object_r:vendor_camera_sensor_prop:s0
+ vendor.video.scene.recognition                  u:object_r:vendor_camera_prop:s0
+diff --git a/sepolicy/vendor/system_app.te b/sepolicy/vendor/system_app.te
+index 87e7505..d57a293 100644
+--- a/sepolicy/vendor/system_app.te
++++ b/sepolicy/vendor/system_app.te
+@@ -1,4 +1,5 @@
+ # Binder
++hal_client_domain(system_app, hal_health)
+ binder_call(system_app, hal_audio_default)
+ binder_call(system_app, hal_bootctl_default)
+ binder_call(system_app, hal_camera_default)
+-- 
+2.56.1
+

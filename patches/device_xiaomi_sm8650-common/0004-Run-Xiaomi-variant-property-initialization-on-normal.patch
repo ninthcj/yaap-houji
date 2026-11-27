@@ -1,0 +1,25 @@
+From 4495304940785eca3a9c41bba9d23afbf5d1184f Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 18:02:44 -0400
+Subject: [PATCH 4/8] Run Xiaomi variant property initialization on normal boot
+
+- Link the same Xiaomi init implementation for Android second-stage init as for recovery.
+---
+ BoardConfigCommon.mk | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/BoardConfigCommon.mk b/BoardConfigCommon.mk
+index 38acdd4..22ab711 100644
+--- a/BoardConfigCommon.mk
++++ b/BoardConfigCommon.mk
+@@ -70,6 +70,7 @@ TARGET_SCREEN_DENSITY := 480
+ 
+ # Init
+ TARGET_RECOVERY_DEVICE_MODULES := libinit_xiaomi_8650
++TARGET_INIT_VENDOR_LIB := //device/xiaomi/sm8650-common/init:libinit_xiaomi_8650
+ 
+ # Init Boot
+ BOARD_INIT_BOOT_HEADER_VERSION := 4
+-- 
+2.56.1
+

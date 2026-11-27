@@ -1,0 +1,46 @@
+From 80b845a42313c9a7194e205ffe6c47de01727109 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Tue, 24 Nov 2026 14:05:04 -0400
+Subject: [PATCH 08/10] houji: use staged official Google android14-6.1 GKI
+ kernel and system_dlkm when present
+
+---
+ configs/kernel/prebuilt.mk | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/configs/kernel/prebuilt.mk b/configs/kernel/prebuilt.mk
+index 964d41e..bc720b7 100644
+--- a/configs/kernel/prebuilt.mk
++++ b/configs/kernel/prebuilt.mk
+@@ -1,23 +1,25 @@
+ # SPDX-License-Identifier: Apache-2.0
+ 
+ HOUJI_STOCK_KERNEL := vendor/xiaomi/houji/kernel/stock
++HOUJI_GKI_KERNEL := $(if $(wildcard kernel/prebuilts/houji-gki/Image),kernel/prebuilts/houji-gki,$(HOUJI_STOCK_KERNEL))
+ 
+ # Userspace components still require exported kernel UAPI headers. Generate
+-# headers from MiCode, while forcing the boot kernel to the stock binary.
++# headers from MiCode, while forcing the boot kernel and system_dlkm to the
++# staged Google GKI release when present (falling back to stock otherwise).
+ TARGET_KERNEL_SOURCE := kernel/xiaomi/houji
+ TARGET_KERNEL_CONFIG := gki_defconfig
+ TARGET_KERNEL_VERSION := 6.1
+ TARGET_KERNEL_CLANG_VERSION := r547379
+ KERNEL_NO_GCC := true
+ TARGET_FORCE_PREBUILT_KERNEL := true
+-TARGET_PREBUILT_KERNEL := $(HOUJI_STOCK_KERNEL)/Image
++TARGET_PREBUILT_KERNEL := $(HOUJI_GKI_KERNEL)/Image
+ BOARD_PREBUILT_DTBIMAGE_DIR := $(HOUJI_STOCK_KERNEL)/dtb
+ BOARD_PREBUILT_DTBOIMAGE := $(HOUJI_STOCK_KERNEL)/dtbo.img
+ 
+ BOARD_USES_VENDOR_DLKMIMAGE := true
+ BOARD_USES_SYSTEM_DLKMIMAGE := true
+ # Preserve the versioned system module paths expected by the stock init script.
+-BOARD_SYSTEM_DLKM_SRC := $(HOUJI_STOCK_KERNEL)/system_dlkm
++BOARD_SYSTEM_DLKM_SRC := $(HOUJI_GKI_KERNEL)/system_dlkm
+ 
+ # Signed stock modules must retain their bytes. Android regenerates ramdisk
+ # dependency metadata; the DLKM trees retain their original metadata and paths.
+-- 
+2.56.1
+

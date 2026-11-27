@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<manifest>
+  <remove-project name="yaosp/vendor_google_gms" />
+  <remove-project name="yaosp/vendor_google_pixel" />
+
+  <project path="device/xiaomi/houji" name="nian0114/android_device_xiaomi_houji" remote="github" revision="9236d9e936771ee9587a6569de6a00d340ec5781" upstream="refs/heads/lineage-23.2" />
+  <project path="device/xiaomi/sm8650-common" name="nian0114/device_xiaomi_sm8650-common" remote="github" revision="db264b4226242d40477154d93f0fbb9a7cc5a7cc" upstream="refs/heads/lineage-23.2" />
+  <project path="vendor/xiaomi/houji" name="nian0114/android_vendor_xiaomi_houji" remote="github" revision="e7f91c48d3096d423f25d5b036361609d8cfa235" upstream="refs/heads/lineage-23.2" />
+  <project path="vendor/xiaomi/sm8650-common" name="nian0114/android_vendor_xiaomi_sm8650-common" remote="github" revision="8f6c507d1f96aa2f7e865fd22a36e1bf4e5ad0be" upstream="refs/heads/lineage-23.2" />
+  <project path="hardware/xiaomi" name="hardware_xiaomi" remote="yaap" revision="66389495bf9a81a0e714b4153247f265dedb43a7" upstream="refs/heads/seventeen" />
+  <!-- The Android Common 6.1.138 commit named by the stock Image, for UAPI only. -->
+  <project path="kernel/xiaomi/houji" name="kernel/common" remote="aosp" revision="0c3d559bcd85c64dae9c9c9687abbe5347fff3ad" upstream="refs/tags/android14-6.1-2025-06_r15" />
+
+  <extend-project name="packages_apps_Aperture" path="packages/apps/Aperture" revision="390e0d9f5b3133a078b53b811504968f077fb81c" upstream="refs/heads/seventeen" />
+  <extend-project name="vendor_yaap" path="vendor/yaap" revision="7ac9801a850fe3db9e08cadf23217a1e83495deb" upstream="refs/heads/seventeen" />
+  <extend-project name="vendor_microg" path="vendor/microg" revision="29c3c3249daabd2a727a7fa4aedcd4cd87bc3879" upstream="refs/heads/seventeen" />
+  <extend-project name="frameworks_base" path="frameworks/base" revision="013b0e44d237de5be92071dc99171106b3027945" upstream="refs/heads/seventeen" />
+  <extend-project name="hardware_lineage_compat" path="hardware/lineage/compat" revision="df3745aa58b39e5288e423cbfea436041780defd" upstream="refs/heads/seventeen" />
+  <extend-project name="build_make" path="build/make" revision="b3714b46c6ffc60a65da1032b43b44ca1eee4040" upstream="refs/heads/seventeen" />
+  <extend-project name="build_soong" path="build/soong" revision="dd61360d8c57a83c49a6b8ca62fed882254aa5de" upstream="refs/heads/seventeen" />
+  <extend-project name="bootable_recovery" path="bootable/recovery" revision="2bc75fbed39574986be294b510ee07ed269b8176" upstream="refs/heads/seventeen" />
+  <extend-project name="android_vendor_codeaurora_telephony" path="vendor/codeaurora/telephony" revision="efe21bde722a3585e357bee0e09e5da54f229589" upstream="refs/heads/lineage-23.2" />
+  <extend-project name="GrapheneOS/platform_external_vanadium" path="external/vanadium" revision="c0c4d1857b76a43ebfc08f896b303cecb4402731" upstream="refs/heads/17" />
+</manifest>

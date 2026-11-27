@@ -1,0 +1,136 @@
+From d0ed2ce5d33aebe4ecffc85dd71fd517d6bf725d Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 17:06:26 -0400
+Subject: [PATCH] Preserve signed microG APKs and install houji ARM64 JNI
+
+- Treat upstream packages as preprocessed so Soong cannot rewrite the signed archive contents.
+- Install GmsCore native libraries from the signed APK beside the immutable privileged app on houji.
+---
+ FDroid/Android.bp    |  1 +
+ FakeStore/Android.bp |  3 +++
+ GmsCore/Android.bp   |  3 +++
+ GmsCore/Android.mk   | 37 +++++++++++++++++++++++++++++++++++++
+ GsfProxy/Android.bp  |  1 +
+ README.md            | 14 ++++++++++++++
+ 6 files changed, 59 insertions(+)
+ create mode 100644 GmsCore/Android.mk
+
+diff --git a/FDroid/Android.bp b/FDroid/Android.bp
+index d49d3be..3a16c64 100644
+--- a/FDroid/Android.bp
++++ b/FDroid/Android.bp
+@@ -2,6 +2,7 @@ android_app_import {
+     name: "FDroid",
+     apk: "FDroid.apk",
+     presigned: true,
++    preprocessed: true,
+     optional_uses_libs: [
+         "androidx.window.extensions",
+         "androidx.window.sidecar",
+diff --git a/FakeStore/Android.bp b/FakeStore/Android.bp
+index 7fa1ed3..3a9a492 100644
+--- a/FakeStore/Android.bp
++++ b/FakeStore/Android.bp
+@@ -17,6 +17,9 @@ android_app_import {
+     apk: "FakeStore.apk",
+     privileged: true,
+     presigned: true,
++    // Uncompressing the privileged app's DEX would strip its upstream signature.
++    preprocessed: true,
++    skip_preprocessed_apk_checks: true,
+     optional_uses_libs: [
+         "androidx.window.extensions",
+         "androidx.window.sidecar",
+diff --git a/GmsCore/Android.bp b/GmsCore/Android.bp
+index 2d73f8b..bb2c0f4 100644
+--- a/GmsCore/Android.bp
++++ b/GmsCore/Android.bp
+@@ -24,6 +24,9 @@ android_app_import {
+     apk: "GmsCore.apk",
+     privileged: true,
+     presigned: true,
++    // JNI and DEX compression are part of the upstream v2-signed APK.
++    preprocessed: true,
++    skip_preprocessed_apk_checks: true,
+     overrides: ["com.qualcomm.location"],
+     required: [
+         "privapp-permissions-com.google.android.gms.xml",
+diff --git a/GmsCore/Android.mk b/GmsCore/Android.mk
+new file mode 100644
+index 0000000..003f942
+--- /dev/null
++++ b/GmsCore/Android.mk
+@@ -0,0 +1,37 @@
++# SPDX-License-Identifier: Apache-2.0
++
++LOCAL_PATH := $(call my-dir)
++
++ifeq ($(TARGET_PRODUCT),yaap_houji)
++
++GMSCORE_ARM64_LIBS := \
++    libc++_shared.so \
++    libconscrypt_gmscore_jni.so \
++    libcronet.102.0.5005.125.so \
++    libimage_processing_util_jni.so \
++    libmapbox-gl.so \
++    libopencv_java4.so
++
++# PackageManager does not extract JNI from a bundled app during system scanning.
++define install-gmscore-arm64-library
++include $(CLEAR_VARS)
++LOCAL_MODULE := GmsCore_jni_$(basename $(1))
++LOCAL_MODULE_CLASS := ETC
++LOCAL_PRODUCT_MODULE := true
++LOCAL_MODULE_PATH := $(TARGET_OUT_PRODUCT_APPS_PRIVILEGED)/GmsCore/lib/arm64
++LOCAL_MODULE_STEM := $(1)
++LOCAL_PREBUILT_MODULE_FILE := $(call intermediates-dir-for,ETC,GmsCore_jni_$(basename $(1)))/signed_apk/$(1)
++$$(LOCAL_PREBUILT_MODULE_FILE): $(LOCAL_PATH)/GmsCore.apk
++	$$(hide) mkdir -p $$(dir $$@)
++	$$(hide) unzip -p $$< lib/arm64-v8a/$(1) > $$@.tmp
++	$$(hide) mv -f $$@.tmp $$@
++include $(BUILD_PREBUILT)
++endef
++$(foreach lib,$(GMSCORE_ARM64_LIBS),$(eval $(call install-gmscore-arm64-library,$(lib))))
++
++include $(CLEAR_VARS)
++LOCAL_MODULE := GmsCore_arm64_libraries
++LOCAL_REQUIRED_MODULES := $(addprefix GmsCore_jni_,$(basename $(GMSCORE_ARM64_LIBS)))
++include $(BUILD_PHONY_PACKAGE)
++
++endif
+diff --git a/GsfProxy/Android.bp b/GsfProxy/Android.bp
+index 8ba8926..b62ba49 100644
+--- a/GsfProxy/Android.bp
++++ b/GsfProxy/Android.bp
+@@ -2,5 +2,6 @@ android_app_import {
+     name: "GsfProxy",
+     apk: "GsfProxy.apk",
+     presigned: true,
++    preprocessed: true,
+     product_specific: true,
+ }
+diff --git a/README.md b/README.md
+index e016a5c..c7aea7d 100644
+--- a/README.md
++++ b/README.md
+@@ -3,6 +3,20 @@
+ This is a collection of FOSS APKs, coupled with the respective Makefiles for an
+ easy integration in the Android build system.
+ 
++## YAAP integration
++
++YAAP inherits `vendor/microg/microg.mk` when `TARGET_BUILD_GAPPS` is unset or
++false. The APKs retain their upstream signatures; the YAAP framework's
++microG exception is limited to the specified package names and signer.
++
++On `yaap_houji`, `GmsCore_arm64_libraries` installs the ARM64 members of the
++signed GmsCore APK beside the APK. Android does not extract those members
++while scanning a bundled system app. Do not rezip or re-sign the APK to
++change its native library layout.
++
++## Upstream LineageOS integration
++
++
+ To include them in your build, add a repo manifest file to include this repository as `vendor/partner_gms` and set
+ `WITH_GMS` to `true` when building.
+ 

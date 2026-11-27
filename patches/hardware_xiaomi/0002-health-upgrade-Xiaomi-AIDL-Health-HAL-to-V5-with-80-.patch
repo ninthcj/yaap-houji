@@ -1,0 +1,378 @@
+From 4c80086a863ea38d63aebdd37c95a42b6f8bca2e Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 13:51:38 -0400
+Subject: [PATCH 2/2] health: upgrade Xiaomi AIDL Health HAL to V5 with 80%
+ PMIC bypass charging and SOH
+
+---
+ aidl/health/Android.bp                        |   2 -
+ ...android.hardware.health-service.xiaomi.xml |   2 +-
+ aidl/health/main.cpp                          | 273 +++++++++++++++---
+ 3 files changed, 239 insertions(+), 38 deletions(-)
+
+diff --git a/aidl/health/Android.bp b/aidl/health/Android.bp
+index b478bd0..b4175e1 100644
+--- a/aidl/health/Android.bp
++++ b/aidl/health/Android.bp
+@@ -36,7 +36,6 @@ cc_binary {
+     init_rc: ["android.hardware.health-service.xiaomi.rc"],
+     overrides: [
+         "charger",
+-        "android.hardware.health-service.qti",
+     ],
+ }
+ 
+@@ -48,6 +47,5 @@ cc_binary {
+     init_rc: ["android.hardware.health-service.xiaomi_recovery.rc"],
+     overrides: [
+         "charger.recovery",
+-        "android.hardware.health-service.qti_recovery",
+     ],
+ }
+diff --git a/aidl/health/android.hardware.health-service.xiaomi.xml b/aidl/health/android.hardware.health-service.xiaomi.xml
+index 57906c8..29771ec 100644
+--- a/aidl/health/android.hardware.health-service.xiaomi.xml
++++ b/aidl/health/android.hardware.health-service.xiaomi.xml
+@@ -6,7 +6,7 @@
+ <manifest version="1.0" type="device">
+     <hal format="aidl">
+         <name>android.hardware.health</name>
+-        <version>3</version>
++        <version>5</version>
+         <fqname>IHealth/default</fqname>
+     </hal>
+ </manifest>
+diff --git a/aidl/health/main.cpp b/aidl/health/main.cpp
+index 4c6baf5..ec8af47 100644
+--- a/aidl/health/main.cpp
++++ b/aidl/health/main.cpp
+@@ -1,16 +1,28 @@
+ /*
+- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+  * SPDX-License-Identifier: BSD-3-Clause-Clear
+  */
+ 
+ #define LOG_TAG "android.hardware.health-service.xiaomi"
+ 
++#include <fcntl.h>
++#include <sys/stat.h>
++#include <sys/types.h>
++#include <unistd.h>
++
++#include <mutex>
++#include <string>
++
++#include <android-base/file.h>
+ #include <android-base/logging.h>
++#include <android-base/parseint.h>
++#include <android-base/properties.h>
++#include <android-base/strings.h>
+ #include <android/binder_interface_utils.h>
+-#include <health/utils.h>
++#include <cutils/klog.h>
+ #include <health-impl/ChargerUtils.h>
+ #include <health-impl/Health.h>
+-#include <cutils/klog.h>
++#include <health/utils.h>
+ 
+ using aidl::android::hardware::health::HalHealthLoop;
+ using aidl::android::hardware::health::Health;
+@@ -24,49 +36,237 @@ class ChargerCallbackImpl : public ChargerCallback {
+     ChargerCallbackImpl(const std::shared_ptr<Health>& service) : ChargerCallback(service) {}
+     bool ChargerEnableSuspend() override { return true; }
+ };
+-} //namespace aidl::android::hardware::health
++}  // namespace aidl::android::hardware::health
+ #endif
+ 
+ namespace aidl::android::hardware::health {
+-static constexpr int kChargeCounterMultiplier = 1000; // mAh to uAh
+-static constexpr int kChargeTimeToFullMultiplier = 60; // mins to secs
+-class HealthImpl : public Health {
+- public:
+-  using Health::Health;
+-  virtual ~HealthImpl() {}
+-  ndk::ScopedAStatus getChargeCounterUah(int32_t* out) override;
+- protected:
+-  void UpdateHealthInfo(HealthInfo* health_info) override;
+-};
+-void HealthImpl::UpdateHealthInfo(HealthInfo* health_info) {
+-  if (health_info->batteryChargeTimeToFullNowSeconds == 65535) {
+-    health_info->batteryChargeTimeToFullNowSeconds = -1;
+-  } else {
+-    health_info->batteryChargeTimeToFullNowSeconds *= kChargeTimeToFullMultiplier;
+-  }
+-  health_info->batteryChargeCounterUah *= kChargeCounterMultiplier;
++namespace {
++
++// HealthInfo.aidl mandates capacities in uAh (> 100,000 uAh for real batteries).
++// Legacy Xiaomi kernels reported mAh (< 100,000), whereas SM8650 reports uAh directly.
++constexpr int32_t kChargeCounterMultiplier = 1000;
++constexpr int32_t kMahUpperBound = 100000;
++constexpr int64_t kChargeTimeToFullMultiplier = 60;
++constexpr int64_t kTimeToFullUnsupportedRaw = 65535;
++
++// 80% ceiling matches Android 17 Battery Defender / Longevity threshold;
++// 75% resume provides a 5% hysteresis deadband so PMIC bypass neverchatters.
++constexpr int32_t kLongLifeStopSoc = 80;
++constexpr int32_t kLongLifeResumeSoc = 75;
++
++// Xiaomi PMIC GLink BATT_CHG_PROP_NIGHT_CHARGING (0x38): suspends IBAT while
++// keeping VBUS powering VSYS directly (hardware bypass charging, no USB drop).
++constexpr const char* kNightChargingPath = "/sys/class/qcom-battery/night_charging";
++constexpr const char* kUiSohPath = "/sys/class/qcom-battery/ui_soh";
++constexpr const char* kRawSohPath = "/sys/class/qcom-battery/soh";
++// Stored in /data/property (userdata), never touching the factory persist partition.
++constexpr const char* kPolicyProp = "persist.vendor.charge.policy";
++
++int32_t NormalizeUah(int32_t value) {
++    if (value > 0 && value < kMahUpperBound) {
++        return value * kChargeCounterMultiplier;
++    }
++    return value;
+ }
+-ndk::ScopedAStatus HealthImpl::getChargeCounterUah(int32_t* out) {
+-  *out *= kChargeCounterMultiplier;
+-  return ndk::ScopedAStatus::ok();
++
++bool IsValidPolicy(BatteryChargingPolicy policy) {
++    switch (policy) {
++        case BatteryChargingPolicy::DEFAULT:
++        case BatteryChargingPolicy::LONG_LIFE:
++        case BatteryChargingPolicy::ADAPTIVE:
++        case BatteryChargingPolicy::FORCE_FULL_CHARGE:
++            return true;
++        default:
++            return false;
++    }
+ }
++
++int64_t ReadSohPercent() {
++    for (const char* path : {kUiSohPath, kRawSohPath}) {
++        std::string content;
++        if (::android::base::ReadFileToString(path, &content)) {
++            int64_t soh = 0;
++            if (::android::base::ParseInt(::android::base::Trim(content), &soh) &&
++                soh > 0 && soh <= 100) {
++                return soh;
++            }
++        }
++    }
++    return 0;
++}
++
++BatteryChargingPolicy ReadCurrentPolicy() {
++#ifdef __ANDROID_RECOVERY__
++    return BatteryChargingPolicy::DEFAULT;
++#else
++    int raw = ::android::base::GetIntProperty(
++        kPolicyProp, static_cast<int>(BatteryChargingPolicy::DEFAULT));
++    auto policy = static_cast<BatteryChargingPolicy>(raw);
++    return IsValidPolicy(policy) ? policy : BatteryChargingPolicy::DEFAULT;
++#endif
++}
++
++}  // namespace
++
++class HealthImpl : public Health {
++  public:
++    using Health::Health;
++    ~HealthImpl() override = default;
++
++    ndk::ScopedAStatus getChargeCounterUah(int32_t* out) override {
++        auto status = Health::getChargeCounterUah(out);
++        if (status.isOk() && out != nullptr) {
++            *out = NormalizeUah(*out);
++        }
++        return status;
++    }
++
++    ndk::ScopedAStatus getBatteryHealthData(BatteryHealthData* out) override {
++        auto status = Health::getBatteryHealthData(out);
++        if (status.isOk() && out != nullptr && out->batteryStateOfHealth <= 0) {
++            int64_t soh = ReadSohPercent();
++            if (soh > 0) {
++                out->batteryStateOfHealth = soh;
++            }
++        }
++        return status;
++    }
++
++    ndk::ScopedAStatus getChargingPolicy(BatteryChargingPolicy* out) override {
++        if (out == nullptr) {
++            return ndk::ScopedAStatus::fromExceptionCode(EX_NULL_POINTER);
++        }
++        *out = ReadCurrentPolicy();
++        return ndk::ScopedAStatus::ok();
++    }
++
++    ndk::ScopedAStatus setChargingPolicy(BatteryChargingPolicy in_value) override {
++#ifdef __ANDROID_RECOVERY__
++        (void)in_value;
++        return ndk::ScopedAStatus::fromExceptionCode(EX_UNSUPPORTED_OPERATION);
++#else
++        if (!IsValidPolicy(in_value)) {
++            return ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
++        }
++        if (!::android::base::SetProperty(kPolicyProp,
++                                          std::to_string(static_cast<int>(in_value)))) {
++            LOG(ERROR) << "Failed to set " << kPolicyProp;
++            return ndk::ScopedAStatus::fromServiceSpecificError(IHealth::STATUS_UNKNOWN);
++        }
++        {
++            std::lock_guard<std::mutex> lock(policy_mutex_);
++            bypass_synced_ = false;
++        }
++        (void)update();
++        return ndk::ScopedAStatus::ok();
++#endif
++    }
++
++  protected:
++    void UpdateHealthInfo(HealthInfo* health_info) override {
++        if (health_info == nullptr) {
++            return;
++        }
++        if (health_info->batteryChargeTimeToFullNowSeconds == kTimeToFullUnsupportedRaw ||
++            health_info->batteryChargeTimeToFullNowSeconds < 0) {
++            health_info->batteryChargeTimeToFullNowSeconds =
++                HealthInfo::BATTERY_CHARGE_TIME_TO_FULL_NOW_SECONDS_UNSUPPORTED;
++        } else if (health_info->batteryCapacityLevel == BatteryCapacityLevel::FULL ||
++                   health_info->batteryCapacityLevel == BatteryCapacityLevel::UNKNOWN) {
++            health_info->batteryChargeTimeToFullNowSeconds = 0;
++        } else {
++            health_info->batteryChargeTimeToFullNowSeconds *= kChargeTimeToFullMultiplier;
++        }
++
++        health_info->batteryChargeCounterUah = NormalizeUah(health_info->batteryChargeCounterUah);
++        health_info->batteryFullChargeUah = NormalizeUah(health_info->batteryFullChargeUah);
++        health_info->batteryFullChargeDesignCapacityUah =
++            NormalizeUah(health_info->batteryFullChargeDesignCapacityUah);
++
++        if (health_info->batteryFullChargeUah <= 0 &&
++            health_info->batteryFullChargeDesignCapacityUah > 0) {
++            int64_t soh = ReadSohPercent();
++            if (soh > 0) {
++                health_info->batteryFullChargeUah = static_cast<int32_t>(
++                    (static_cast<int64_t>(health_info->batteryFullChargeDesignCapacityUah) * soh) /
++                    100);
++            }
++        }
++
++#ifndef __ANDROID_RECOVERY__
++        std::lock_guard<std::mutex> lock(policy_mutex_);
++        ApplyChargingPolicyLocked(health_info, ReadCurrentPolicy());
++#endif
++    }
++
++  private:
++    void SetNightChargingLocked(bool enable) {
++        if (bypass_synced_ && bypass_active_ == enable) {
++            return;
++        }
++        if (::android::base::WriteStringToFile(enable ? "1" : "0", kNightChargingPath, true)) {
++            bypass_active_ = enable;
++            bypass_synced_ = true;
++        } else {
++            LOG(WARNING) << "Failed to write night_charging=" << (enable ? 1 : 0);
++        }
++    }
++
++    void ApplyChargingPolicyLocked(HealthInfo* info, BatteryChargingPolicy policy) {
++        const bool charger_online = info->chargerAcOnline || info->chargerUsbOnline ||
++                                    info->chargerWirelessOnline || info->chargerDockOnline;
++        bool want_bypass = bypass_active_;
++        if (policy != BatteryChargingPolicy::LONG_LIFE || !charger_online) {
++            want_bypass = false;
++        } else if (info->batteryLevel >= kLongLifeStopSoc) {
++            want_bypass = true;
++        } else if (info->batteryLevel <= kLongLifeResumeSoc) {
++            want_bypass = false;
++        }
++        SetNightChargingLocked(want_bypass);
++
++        info->chargingPolicy = policy;
++        if (policy == BatteryChargingPolicy::LONG_LIFE && charger_online && bypass_active_) {
++            info->chargingState = BatteryChargingState::LONG_LIFE;
++        } else if (policy == BatteryChargingPolicy::ADAPTIVE && charger_online) {
++            info->chargingState = BatteryChargingState::ADAPTIVE;
++        } else if (info->chargingState == BatteryChargingState::INVALID) {
++            info->chargingState = BatteryChargingState::NORMAL;
++        }
++    }
++
++    std::mutex policy_mutex_;
++    bool bypass_active_ = false;
++    bool bypass_synced_ = false;
++};
++
+ }  // namespace aidl::android::hardware::health
+ 
+ static constexpr const char* gInstanceName = "default";
+ static constexpr std::string_view gChargerArg{"--charger"};
+ 
+-constexpr char ucsiPSYName[]{"ucsi-source-psy-soc:qcom,pmic_glink:qcom,ucsi1"};
++constexpr const char* ucsiPSYNames[] = {
++    "ucsi-source-psy-soc:qcom,pmic_glink:qcom,ucsi1",
++    "ucsi-source-psy-soc:qcom,pmic_glink:qcom,ucsi2",
++};
+ 
+-#define RETRY_COUNT    100
++#define RETRY_COUNT 100
+ 
+-void qti_healthd_board_init(struct healthd_config *hc)
+-{
+-    int fd;
++void qti_healthd_board_init(struct healthd_config* hc) {
++    int fd = -1;
+     unsigned char retries = RETRY_COUNT;
+     int ret = 0;
+-    unsigned char buf;
++    unsigned char buf = 0;
++    struct stat st;
++
++    for (const char* name : ucsiPSYNames) {
++        hc->ignorePowerSupplyNames.push_back(android::String8(name));
++    }
++
++    if (stat("/sys/class/power_supply/bq27421-0/capacity", &st) >= 0) {
++        return;
++    }
+ 
+-    hc->ignorePowerSupplyNames.push_back(android::String8(ucsiPSYName));
+ retry:
+     if (!retries) {
+         KLOG_ERROR(LOG_TAG, "Cannot open battery/capacity, fd=%d\n", fd);
+@@ -78,8 +278,9 @@ retry:
+         KLOG_INFO(LOG_TAG, "opened battery/capacity after %d retries\n", RETRY_COUNT - retries);
+         while (retries) {
+             ret = read(fd, &buf, 1);
+-            if(ret >= 0) {
+-                KLOG_INFO(LOG_TAG, "Read Batt Capacity after %d retries ret : %d\n", RETRY_COUNT - retries, ret);
++            if (ret >= 0) {
++                KLOG_INFO(LOG_TAG, "Read Batt Capacity after %d retries ret : %d\n",
++                          RETRY_COUNT - retries, ret);
+                 close(fd);
+                 return;
+             }
+@@ -105,12 +306,14 @@ int main(int argc, char** argv) {
+     auto config = std::make_unique<healthd_config>();
+     qti_healthd_board_init(config.get());
+     ::android::hardware::health::InitHealthdConfig(config.get());
+-    auto binder = ndk::SharedRefBase::make<aidl::android::hardware::health::HealthImpl>(gInstanceName, std::move(config));
++    auto binder = ndk::SharedRefBase::make<aidl::android::hardware::health::HealthImpl>(
++        gInstanceName, std::move(config));
+ 
+     if (argc >= 2 && argv[1] == gChargerArg) {
+ #if !CHARGER_FORCE_NO_UI
+         KLOG_INFO(LOG_TAG, "Starting charger mode with UI.");
+-        auto charger_callback = std::make_shared<aidl::android::hardware::health::ChargerCallbackImpl>(binder);
++        auto charger_callback =
++            std::make_shared<aidl::android::hardware::health::ChargerCallbackImpl>(binder);
+         return ChargerModeMain(binder, charger_callback);
+ #endif
+         KLOG_INFO(LOG_TAG, "Starting charger mode without UI.");
+-- 
+2.56.1
+

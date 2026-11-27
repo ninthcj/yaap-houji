@@ -1,0 +1,25 @@
+From 6145a80b3993cfea7f10dbab93a5dcd1dbfeea99 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 15:21:03 -0400
+Subject: [PATCH 2/8] sm8650-common: match the YAAP vibrator selector type
+
+---
+ common.mk | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/common.mk b/common.mk
+index 4936462..c15df04 100644
+--- a/common.mk
++++ b/common.mk
+@@ -397,7 +397,7 @@ PRODUCT_COPY_FILES += \
+ 
+ # Vibrator
+ $(call soong_config_set,qti_vibrator,effect_lib,libqtivibratoreffect.xiaomi)
+-$(call soong_config_set_bool,qti_vibrator,use_effect_stream,true)
++$(call soong_config_set,qti_vibrator,use_effect_stream,true)
+ 
+ PRODUCT_PACKAGES += \
+     vendor.qti.hardware.vibrator.service
+-- 
+2.56.1
+

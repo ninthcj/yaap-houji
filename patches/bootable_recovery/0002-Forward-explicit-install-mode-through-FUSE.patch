@@ -1,0 +1,94 @@
+From efd0cc172a5f4690aa0774002659e2358d5d0025 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 18:20:20 -0400
+Subject: [PATCH 2/2] Forward explicit install mode through FUSE
+
+- Preserve physical confirmation policy in the FUSE package path.
+---
+ install/fuse_install.cpp | 22 ++++++++++------------
+ 1 file changed, 10 insertions(+), 12 deletions(-)
+
+diff --git a/install/fuse_install.cpp b/install/fuse_install.cpp
+index 6c60d04..4b5dd9b 100644
+--- a/install/fuse_install.cpp
++++ b/install/fuse_install.cpp
+@@ -194,7 +194,7 @@ InstallResult InstallWithFuseFromPath(std::string_view path, Device* device, Ins
+         Package::CreateFilePackage(FUSE_SIDELOAD_HOST_PATHNAME,
+                                    std::bind(&RecoveryUI::SetProgress, ui, std::placeholders::_1));
+     result = InstallPackage(package.get(), FUSE_SIDELOAD_HOST_PATHNAME, false, 0 /* retry_count */,
+-                            device);
++                            device, mode);
+     break;
+   }
+ 
+@@ -217,34 +217,30 @@ InstallResult InstallWithFuseFromPath(std::string_view path, Device* device, Ins
+ // Check whether the mmc type of provided path (/sys/block/mmcblk*/device/type)
+ // is SD (sdcard) or not.
+ static int check_mmc_is_sdcard(const char* mmc_type_path) {
+-
+   std::string mmc_type;
+ 
+   LOG(INFO) << "Checking MMC type for path : " << mmc_type_path;
+ 
+   if (!android::base::ReadFileToString(mmc_type_path, &mmc_type)) {
+     LOG(ERROR) << "Failed to read MMC type from path: " << mmc_type_path
+-	       << " Error: " << strerror(errno);
++               << " Error: " << strerror(errno);
+     return -1;
+   }
+ 
+   mmc_type = android::base::Trim(mmc_type);
+   LOG(INFO) << "MMC type is : " << mmc_type;
+ 
+-  if (mmc_type == "SD" || mmc_type == "pcie")
+-    return 0; // SD card or PCIe-based SD card detected
++  if (mmc_type == "SD" || mmc_type == "pcie") return 0;  // SD card or PCIe-based SD card detected
+ 
+   return -1;
+-
+ }
+ 
+ // Gather mount point and other info from fstab, find the right block
+ // path where sdcard is mounted, and try mounting it.
+ static int do_sdcard_mount() {
+-
+   int rc = 0;
+ 
+-  Volume *v = volume_for_mount_point("/sdcard");
++  Volume* v = volume_for_mount_point("/sdcard");
+   if (v == nullptr) {
+     LOG(ERROR) << "Unknown volume for /sdcard. Check fstab\n";
+     return -1;
+@@ -266,7 +262,8 @@ static int do_sdcard_mount() {
+     return -1;
+   }
+ 
+-  // Check filesystem type from fstab and dynamically set the type based on the value. Accepted values: vfat, exfat, auto
++  // Check filesystem type from fstab and dynamically set the type based on the value. Accepted
++  // values: vfat, exfat, auto
+   std::string fs_type = v->fs_type;
+ 
+   // If fs_type is "auto", try mounting as vfat first, then exfat.
+@@ -290,7 +287,8 @@ static int do_sdcard_mount() {
+   } else {
+     // If fs_type is explicitly vfat or exfat, attempt that directly
+     LOG(INFO) << "Attempting to mount as " << fs_type;
+-    rc = mount(sdcard_block_path, v->mount_point.c_str(), fs_type.c_str(), v->flags, v->fs_options.c_str());
++    rc = mount(sdcard_block_path, v->mount_point.c_str(), fs_type.c_str(), v->flags,
++               v->fs_options.c_str());
+     if (rc == 0) {
+       LOG(INFO) << "Mounted sdcard as " << fs_type;
+       return 0;
+@@ -298,10 +296,10 @@ static int do_sdcard_mount() {
+   }
+ 
+   // If both mounting attempts fail, log the error
+-  LOG(ERROR) << "Mount failed for " << fs_type;;
++  LOG(ERROR) << "Mount failed for " << fs_type;
++  ;
+ 
+   return -1;
+-
+ }
+ 
+ InstallResult ApplyFromSdcard(Device* device) {

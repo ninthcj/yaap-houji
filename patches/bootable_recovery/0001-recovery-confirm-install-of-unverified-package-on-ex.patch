@@ -1,0 +1,292 @@
+From ef7486f604701608a2571d7b6e20815938592036 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 18:16:56 -0400
+Subject: [PATCH 1/2] recovery: confirm install of unverified package on
+ explicitly unlocked devices
+
+Offer a No/Yes prompt (Signature verification failed / Install untrusted
+package?) only for interactive installs when ro.boot.flash.locked is 0 and
+the text UI is visible. Unattended, update_package, rescue and
+sideload-auto-reboot installs, and wipe packages, stay strict.
+---
+ install/adb_install.cpp                | 10 +++---
+ install/fuse_install.cpp               |  4 +--
+ install/include/install/adb_install.h  |  3 +-
+ install/include/install/fuse_install.h |  2 +-
+ install/include/install/install.h      | 14 ++++++--
+ install/install.cpp                    | 46 +++++++++++++++++++++-----
+ recovery.cpp                           | 18 ++++++----
+ 7 files changed, 71 insertions(+), 26 deletions(-)
+
+diff --git a/install/adb_install.cpp b/install/adb_install.cpp
+index 29ab556..bf2ae09 100644
+--- a/install/adb_install.cpp
++++ b/install/adb_install.cpp
+@@ -90,7 +90,7 @@ static bool WriteStatusToFd(MinadbdCommandStatus status, int fd) {
+ 
+ // Installs the package from FUSE. Returns the installation result and whether it should continue
+ // waiting for new commands.
+-static auto AdbInstallPackageHandler(Device* device, InstallResult* result) {
++static auto AdbInstallPackageHandler(Device* device, InstallMode mode, InstallResult* result) {
+   // How long (in seconds) we wait for the package path to be ready. It doesn't need to be too long
+   // because the minadbd service has already issued an install command. FUSE_SIDELOAD_HOST_PATHNAME
+   // will start to exist once the host connects and starts serving a package. Poll for its
+@@ -115,7 +115,7 @@ static auto AdbInstallPackageHandler(Device* device, InstallResult* result) {
+     auto package =
+         Package::CreateFilePackage(FUSE_SIDELOAD_HOST_PATHNAME,
+                                    std::bind(&RecoveryUI::SetProgress, ui, std::placeholders::_1));
+-    *result = InstallPackage(package.get(), FUSE_SIDELOAD_HOST_PATHNAME, false, 0, device);
++    *result = InstallPackage(package.get(), FUSE_SIDELOAD_HOST_PATHNAME, false, 0, device, mode);
+     break;
+   }
+ 
+@@ -336,7 +336,8 @@ static void CreateMinadbdServiceAndExecuteCommands(
+   signal(SIGPIPE, SIG_DFL);
+ }
+ 
+-InstallResult ApplyFromAdb(Device* device, bool rescue_mode, Device::BuiltinAction* reboot_action) {
++InstallResult ApplyFromAdb(Device* device, bool rescue_mode, Device::BuiltinAction* reboot_action,
++                           InstallMode mode) {
+   // Save the usb state to restore after the sideload operation.
+   std::string usb_state = android::base::GetProperty("sys.usb.state", "none");
+   // Clean up state and stop adbd.
+@@ -349,7 +350,8 @@ InstallResult ApplyFromAdb(Device* device, bool rescue_mode, Device::BuiltinActi
+ 
+   InstallResult install_result = INSTALL_NONE;
+   std::map<MinadbdCommand, CommandFunction> command_map{
+-    { MinadbdCommand::kInstall, std::bind(&AdbInstallPackageHandler, device, &install_result) },
++    { MinadbdCommand::kInstall,
++      std::bind(&AdbInstallPackageHandler, device, mode, &install_result) },
+     { MinadbdCommand::kRebootAndroid, std::bind(&AdbRebootHandler, MinadbdCommand::kRebootAndroid,
+                                                 &install_result, reboot_action) },
+     { MinadbdCommand::kRebootBootloader,
+diff --git a/install/fuse_install.cpp b/install/fuse_install.cpp
+index 30d5720..6c60d04 100644
+--- a/install/fuse_install.cpp
++++ b/install/fuse_install.cpp
+@@ -155,7 +155,7 @@ static bool StartInstallPackageFuse(std::string_view path) {
+   return run_fuse_sideload(std::move(fuse_data_provider)) == 0;
+ }
+ 
+-InstallResult InstallWithFuseFromPath(std::string_view path, Device* device) {
++InstallResult InstallWithFuseFromPath(std::string_view path, Device* device, InstallMode mode) {
+   // We used to use fuse in a thread as opposed to a process. Since accessing
+   // through fuse involves going from kernel to userspace to kernel, it leads
+   // to deadlock when a page fault occurs. (Bug: 26313124)
+@@ -328,7 +328,7 @@ InstallResult ApplyFromSdcard(Device* device) {
+   ui->Print("\n-- Install %s ...\n", path.c_str());
+   SetSdcardUpdateBootloaderMessage();
+ 
+-  auto result = InstallWithFuseFromPath(path, device);
++  auto result = InstallWithFuseFromPath(path, device, InstallMode::kInteractive);
+   ensure_path_unmounted(SDCARD_ROOT);
+   return result;
+ }
+diff --git a/install/include/install/adb_install.h b/install/include/install/adb_install.h
+index 8800223..e77e383 100644
+--- a/install/include/install/adb_install.h
++++ b/install/include/install/adb_install.h
+@@ -22,4 +22,5 @@
+ // Applies a package via `adb sideload` or `adb rescue`. Returns the install result. When a reboot
+ // has been requested, INSTALL_REBOOT will be the return value, with the reboot target set in
+ // reboot_action.
+-InstallResult ApplyFromAdb(Device* device, bool rescue_mode, Device::BuiltinAction* reboot_action);
++InstallResult ApplyFromAdb(Device* device, bool rescue_mode, Device::BuiltinAction* reboot_action,
++                           InstallMode mode);
+diff --git a/install/include/install/fuse_install.h b/install/include/install/fuse_install.h
+index 29c283f..04e0249 100644
+--- a/install/include/install/fuse_install.h
++++ b/install/include/install/fuse_install.h
+@@ -25,6 +25,6 @@
+ // Starts FUSE with the package from |path| as the data source. And installs the package from
+ // |FUSE_SIDELOAD_HOST_PATHNAME|. The |path| can point to the location of a package zip file or a
+ // block map file with the prefix '@'; e.g. /sdcard/package.zip, @/cache/recovery/block.map.
+-InstallResult InstallWithFuseFromPath(std::string_view path, Device* device);
++InstallResult InstallWithFuseFromPath(std::string_view path, Device* device, InstallMode mode);
+ 
+ InstallResult ApplyFromSdcard(Device* device);
+diff --git a/install/include/install/install.h b/install/include/install/install.h
+index 0f5102f..b672ae8 100644
+--- a/install/include/install/install.h
++++ b/install/include/install/install.h
+@@ -45,13 +45,21 @@ enum class OtaType {
+   BRICK,
+ };
+ 
++// How an install was initiated. Only kInteractive installs, started by a person at the device or
++// at an attended adb sideload, may offer to override a signature verification failure.
++enum class InstallMode {
++  kUnattended,
++  kInteractive,
++};
++
+ // Installs the given update package. The package_id is a string provided by the caller (e.g. the
+ // package path) to identify the package and log to last_install. This function should also wipe the
+ // cache partition after a successful installation if |should_wipe_cache| is true or an updater
+-// command asks to wipe the cache.
++// command asks to wipe the cache. A package failing signature verification is rejected unless
++// |mode| is kInteractive and an explicitly unlocked device's user confirms on screen.
+ InstallResult InstallPackage(Package* package, const std::string_view package_id,
+-                             bool should_wipe_cache, int retry_count,
+-                             Device* ui);
++                             bool should_wipe_cache, int retry_count, Device* device,
++                             InstallMode mode);
+ 
+ // Verifies the package by ota keys. Returns true if the package is verified successfully,
+ // otherwise returns false.
+diff --git a/install/install.cpp b/install/install.cpp
+index 98514cf..80fe5c8 100644
+--- a/install/install.cpp
++++ b/install/install.cpp
+@@ -374,7 +374,7 @@ static void log_max_temperature(int* max_temperature, const std::atomic<bool>& l
+   }
+ }
+ 
+-static bool PerformPowerwashIfRequired(ZipArchiveHandle zip, Device *device) {
++static bool PerformPowerwashIfRequired(ZipArchiveHandle zip, Device* device) {
+   const auto payload_properties = ExtractPayloadProperties(zip);
+   if (payload_properties.find("POWERWASH=1") != std::string::npos) {
+     LOG(INFO) << "Payload properties has POWERWASH=1, wiping userdata...";
+@@ -392,8 +392,10 @@ static InstallResult TryUpdateBinary(Package* package, bool* wipe_cache,
+   auto zip = package->GetZipArchiveHandle();
+   bool has_metadata = ReadMetadataFromPackage(zip, &metadata);
+ 
+-  bool package_is_ab = has_metadata && get_value(metadata, "ota-type") == OtaTypeToString(OtaType::AB);
+-  const bool package_is_brick = has_metadata && get_value(metadata, "ota-type") == OtaTypeToString(OtaType::BRICK);
++  bool package_is_ab =
++      has_metadata && get_value(metadata, "ota-type") == OtaTypeToString(OtaType::AB);
++  const bool package_is_brick =
++      has_metadata && get_value(metadata, "ota-type") == OtaTypeToString(OtaType::BRICK);
+   if (package_is_brick) {
+     LOG(INFO) << "Installing a brick package";
+     if (package->GetType() == PackageType::kFile &&
+@@ -598,9 +600,32 @@ static InstallResult TryUpdateBinary(Package* package, bool* wipe_cache,
+   return INSTALL_SUCCESS;
+ }
+ 
++// An explicitly unlocked device (ro.boot.flash.locked == 0) may install a package that fails
++// signature verification, but only when a person on a visible screen picks "Yes". Anything else
++// (locked, property absent, hidden or no UI, key interruption) keeps the package rejected.
++static bool ConfirmUntrustedInstall(Device* device) {
++  if (android::base::GetProperty("ro.boot.flash.locked", "") != "0") {
++    return false;
++  }
++  auto ui = device->GetUI();
++  if (!ui->IsTextVisible()) {
++    return false;
++  }
++  const std::vector<std::string> headers{ "Signature verification failed",
++                                          "Install untrusted package?" };
++  const std::vector<std::string> items{ "No", "Yes" };
++  constexpr size_t kNo = 0;
++  constexpr size_t kYes = 1;
++  size_t chosen = ui->ShowMenu(
++      headers, items, kNo, true,
++      std::bind(&Device::HandleMenuKey, device, std::placeholders::_1, std::placeholders::_2));
++  return chosen == kYes;
++}
++
+ static InstallResult VerifyAndInstallPackage(Package* package, bool* wipe_cache,
+                                              std::vector<std::string>* log_buffer, int retry_count,
+-                                             int* max_temperature, Device* device) {
++                                             int* max_temperature, Device* device,
++                                             InstallMode mode) {
+   auto ui = device->GetUI();
+   ui->SetBackground(RecoveryUI::INSTALLING_UPDATE);
+   // Give verification half the progress bar...
+@@ -609,8 +634,12 @@ static InstallResult VerifyAndInstallPackage(Package* package, bool* wipe_cache,
+ 
+   // Verify package.
+   if (!verify_package(package, ui)) {
+-    log_buffer->push_back(android::base::StringPrintf("error: %d", kZipVerificationFailure));
+-    return INSTALL_CORRUPT;
++    if (mode != InstallMode::kInteractive || !ConfirmUntrustedInstall(device)) {
++      log_buffer->push_back(android::base::StringPrintf("error: %d", kZipVerificationFailure));
++      return INSTALL_CORRUPT;
++    }
++    LOG(WARNING) << "Installing package that failed signature verification at user request";
++    ui->Print("Installing untrusted package at your request.\n");
+   }
+ 
+   // Verify and install the contents of the package.
+@@ -628,7 +657,8 @@ static InstallResult VerifyAndInstallPackage(Package* package, bool* wipe_cache,
+ }
+ 
+ InstallResult InstallPackage(Package* package, const std::string_view package_id,
+-                             bool should_wipe_cache, int retry_count, Device* device) {
++                             bool should_wipe_cache, int retry_count, Device* device,
++                             InstallMode mode) {
+   auto ui = device->GetUI();
+   auto start = std::chrono::system_clock::now();
+ 
+@@ -651,7 +681,7 @@ InstallResult InstallPackage(Package* package, const std::string_view package_id
+   } else {
+     bool updater_wipe_cache = false;
+     result = VerifyAndInstallPackage(package, &updater_wipe_cache, &log_buffer, retry_count,
+-                                     &max_temperature, device);
++                                     &max_temperature, device, mode);
+     should_wipe_cache = should_wipe_cache || updater_wipe_cache;
+   }
+ 
+diff --git a/recovery.cpp b/recovery.cpp
+index 5825e0d..4127a21 100644
+--- a/recovery.cpp
++++ b/recovery.cpp
+@@ -669,9 +669,11 @@ static Device::BuiltinAction PromptAndWait(Device* device, InstallResult status)
+         if (chosen_action == Device::ENTER_RESCUE) {
+           // Switch to graphics screen.
+           ui->ShowText(false);
+-          status = ApplyFromAdb(device, true /* rescue_mode */, &reboot_action);
++          status = ApplyFromAdb(device, true /* rescue_mode */, &reboot_action,
++                                InstallMode::kUnattended);
+         } else if (chosen_action == Device::APPLY_ADB_SIDELOAD) {
+-          status = ApplyFromAdb(device, false /* rescue_mode */, &reboot_action);
++          status = ApplyFromAdb(device, false /* rescue_mode */, &reboot_action,
++                                InstallMode::kInteractive);
+         } else {
+           adb = false;
+           status = ApplyFromSdcard(device);
+@@ -982,20 +984,20 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
+         status = INSTALL_ERROR;
+       } else if (install_with_fuse || should_use_fuse) {
+         LOG(INFO) << "Installing package " << update_package << " with fuse";
+-        status = InstallWithFuseFromPath(update_package, device);
++        status = InstallWithFuseFromPath(update_package, device, InstallMode::kUnattended);
+       } else if (auto memory_package = Package::CreateMemoryPackage(
+                      update_package,
+                      std::bind(&RecoveryUI::SetProgress, ui, std::placeholders::_1));
+                  memory_package != nullptr) {
+         status = InstallPackage(memory_package.get(), update_package, should_wipe_cache,
+-                                retry_count, device);
++                                retry_count, device, InstallMode::kUnattended);
+       } else {
+         // We may fail to memory map the package on 32 bit builds for packages with 2GiB+ size.
+         // In such cases, we will try to install the package with fuse. This is not the default
+         // installation method because it introduces a layer of indirection from the kernel space.
+         LOG(WARNING) << "Failed to memory map package " << update_package
+                      << "; falling back to install with fuse";
+-        status = InstallWithFuseFromPath(update_package, device);
++        status = InstallWithFuseFromPath(update_package, device, InstallMode::kUnattended);
+       }
+       if (status != INSTALL_SUCCESS) {
+         ui->Print("Installation aborted.\n");
+@@ -1055,7 +1057,9 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
+     if (!sideload_auto_reboot) {
+       ui->ShowText(true);
+     }
+-    status = ApplyFromAdb(device, false /* rescue_mode */, &next_action);
++    status =
++        ApplyFromAdb(device, false /* rescue_mode */, &next_action,
++                     sideload_auto_reboot ? InstallMode::kUnattended : InstallMode::kInteractive);
+     ui->Print("\nInstall from ADB complete (status: %d).\n", status);
+     if (sideload_auto_reboot) {
+       status = INSTALL_REBOOT;
+@@ -1063,7 +1067,7 @@ Device::BuiltinAction start_recovery(Device* device, const std::vector<std::stri
+     }
+   } else if (rescue) {
+     save_current_log = true;
+-    status = ApplyFromAdb(device, true /* rescue_mode */, &next_action);
++    status = ApplyFromAdb(device, true /* rescue_mode */, &next_action, InstallMode::kUnattended);
+     ui->Print("\nInstall from ADB complete (status: %d).\n", status);
+   } else if (!just_exit) {
+     // Always show menu if no command is specified.

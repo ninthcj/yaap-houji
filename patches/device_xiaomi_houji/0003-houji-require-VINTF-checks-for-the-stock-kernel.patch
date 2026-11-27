@@ -1,0 +1,22 @@
+From 25ec80833ddbd44789e393b64f3b21544535dc07 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 15:21:03 -0400
+Subject: [PATCH 03/10] houji: require VINTF checks for the stock kernel
+
+---
+ yaap_houji.mk | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/yaap_houji.mk b/yaap_houji.mk
+index d282ced..5bb8696 100644
+--- a/yaap_houji.mk
++++ b/yaap_houji.mk
+@@ -19,3 +19,5 @@ PRODUCT_DEVICE := houji
+ PRODUCT_MANUFACTURER := Xiaomi
+ PRODUCT_BRAND := Xiaomi
+ PRODUCT_MODEL := 23127PN0CC
++
++PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := true
+-- 
+2.56.1
+

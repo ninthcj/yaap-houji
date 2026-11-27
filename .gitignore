@@ -1,0 +1,12 @@
+keys/
+yaap/
+dist/
+preflight/
+.ccache/
+work/
+out/
+__pycache__/
+*.pyc
+*.img
+*.zip
+*.log

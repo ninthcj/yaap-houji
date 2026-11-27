@@ -1,0 +1,25 @@
+From 53b58a1c469c900eec2eee4144a2572c76a05e60 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Tue, 24 Nov 2026 07:38:09 -0400
+Subject: [PATCH 5/8] sm8650-common: include hardware/qcom-caf/bootctrl Soong
+ namespace
+
+---
+ common.mk | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/common.mk b/common.mk
+index c15df04..d89d189 100644
+--- a/common.mk
++++ b/common.mk
+@@ -326,6 +326,7 @@ PRODUCT_PACKAGES += \
+ # Soong namespaces
+ PRODUCT_SOONG_NAMESPACES += \
+     $(LOCAL_PATH) \
++    hardware/qcom-caf/bootctrl \
+     hardware/xiaomi
+ 
+ # Telephony
+-- 
+2.56.1
+

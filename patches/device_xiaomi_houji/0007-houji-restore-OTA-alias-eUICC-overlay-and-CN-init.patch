@@ -1,0 +1,254 @@
+From 18c5fcf5d24f12b6ef5b3a4a15ed6e572f98067d Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 18:01:47 -0400
+Subject: [PATCH 07/10] houji: restore OTA alias, eUICC overlay and CN init
+
+- Assert houji,houjiin and accept houjiin in board-info
+- Restore HoujiEuiccOverlay and init.houji.rc (CN masks the Global eUICC overlay)
+- Use the neutral Xiaomi 14 model; keep OpenEUICC and XiaomiEsimSwitcher
+- Stop generating firmware registrations; radio sources retained for reference
+---
+ BoardConfig.mk                                |  5 ++--
+ board-info.txt                                |  2 +-
+ device.mk                                     |  5 ++++
+ docs/dev/bringup.md                           |  2 +-
+ docs/dev/radio-firmware.md                    |  8 +++---
+ extract-files.py                              |  2 +-
+ init/init.houji.rc                            |  8 ++++++
+ overlays/HoujiEuiccOverlay/Android.bp         | 10 +++++++
+ .../HoujiEuiccOverlay/AndroidManifest.xml     | 16 +++++++++++
+ .../HoujiEuiccOverlay/res/values/arrays.xml   | 24 ++++++++++++++++
+ .../HoujiEuiccOverlay/res/values/config.xml   | 28 +++++++++++++++++++
+ yaap_houji.mk                                 |  2 +-
+ 12 files changed, 101 insertions(+), 11 deletions(-)
+ create mode 100644 init/init.houji.rc
+ create mode 100644 overlays/HoujiEuiccOverlay/Android.bp
+ create mode 100644 overlays/HoujiEuiccOverlay/AndroidManifest.xml
+ create mode 100644 overlays/HoujiEuiccOverlay/res/values/arrays.xml
+ create mode 100644 overlays/HoujiEuiccOverlay/res/values/config.xml
+
+diff --git a/BoardConfig.mk b/BoardConfig.mk
+index 8438441..c0e83c8 100644
+--- a/BoardConfig.mk
++++ b/BoardConfig.mk
+@@ -20,9 +20,8 @@ else
+ include $(DEVICE_PATH)/configs/kernel/prebuilt.mk
+ endif
+ 
+-# Assert: the CN 23127PN0CC bring-up baseline reports ro.product.device=houji; the India SKU
+-# alias (houjiin, which libinit normalizes to houji) is not part of this release.
+-TARGET_OTA_ASSERT_DEVICE := houji
++# OTA: the India SKU reports ro.product.device=houjiin before libinit normalizes it.
++TARGET_OTA_ASSERT_DEVICE := houji,houjiin
+ 
+ # Properties
+ TARGET_ODM_PROP += $(DEVICE_PATH)/configs/properties/odm.prop
+diff --git a/board-info.txt b/board-info.txt
+index d1250ee..e3cf537 100644
+--- a/board-info.txt
++++ b/board-info.txt
+@@ -1 +1 @@
+-require board=houji|pineapple
++require board=houji|houjiin|pineapple
+diff --git a/device.mk b/device.mk
+index 3dd01f0..b72d59a 100644
+--- a/device.mk
++++ b/device.mk
+@@ -19,6 +19,10 @@ PRODUCT_PACKAGES += \
+     OpenEUICC \
+     XiaomiEsimSwitcher
+ 
++# Init: the CN variant masks the Global-only eUICC overlay.
++PRODUCT_COPY_FILES += \
++    $(LOCAL_PATH)/init/init.houji.rc:$(TARGET_COPY_OUT_VENDOR)/etc/init/init.houji.rc
++
+ # Soong namespaces
+ PRODUCT_SOONG_NAMESPACES += \
+     $(LOCAL_PATH)
+@@ -27,6 +31,7 @@ PRODUCT_SOONG_NAMESPACES += \
+ PRODUCT_PACKAGES += \
+     ApertureOverlayHouji \
+     FrameworksResHouji \
++    HoujiEuiccOverlay \
+     SettingsOverlayHouji \
+     SystemUIResHouji
+ 
+diff --git a/docs/dev/bringup.md b/docs/dev/bringup.md
+index d20f5de..d81747b 100644
+--- a/docs/dev/bringup.md
++++ b/docs/dev/bringup.md
+@@ -95,7 +95,7 @@ python3 tools/extract-utils/extract.py --keep-images \
+ python3 device/xiaomi/houji/extract-files.py --kang /path/to/rom/images
+ ```
+ 
+-脚本会处理 houji 和 common 两个模块；固件清单包含 Fastboot 原文件名到分区镜像名的映射。
++脚本会处理 houji 和 common 两个模块；固件清单只作为来源记录，不注册构建或 A/B OTA 分区。
+ 除退出码外，应检查提取日志没有 `file not found`、`Some files failed` 或 traceback，
+ 并确认生成两个 vendor makefile。更新时同步提取 vendor_boot 的模块加载元数据。
+ 
+diff --git a/docs/dev/radio-firmware.md b/docs/dev/radio-firmware.md
+index f9b5af7..754d611 100644
+--- a/docs/dev/radio-firmware.md
++++ b/docs/dev/radio-firmware.md
+@@ -17,10 +17,10 @@
+ | NON-HLOS.bin | radio/modem.img | 3ccb918129b84228c6e3454969a83ba24f6df5e72ca10488e9044a0d11c21d8b |
+ | MODEM-FW.bin | radio/modemfirmware.img | 66dcc89d63d047a8d0a1f70139c09f7378d82387e21d83fa062636447b5315fa |
+ 
+-`proprietary-firmware.txt` 的两个 SHA-1 pin 与 vendor `Android.mk` 保持一致，
+-以便后续 OTA 继续打包这对固件。先完整拉取 vendor Git LFS 对象，再执行
+-正常提取，extract-utils 会保留匹配 pin 的文件。不要对国际版包执行不加
+-区分的 `--kang` 并覆盖这两个 pin；重新生成文件时检查这两项来源与摘要。
++`proprietary-firmware.txt` 保留这两个 SHA-1 pin 作为来源记录；`extract-files.py`
++不再生成固件 `Android.mk`/`AB_OTA_PARTITIONS`，ROM 与 OTA 包不携带任何 radio
++固件分区，需要时由操作者按下文单独刷写。先完整拉取 vendor Git LFS 对象，再执行
++正常提取。不要对国际版包执行不加区分的 `--kang` 并覆盖这两个 pin。
+ 本选择针对国行测试机，国际版实体机需要重新核定地区基带。
+ 
+ ## 安装和验证
+diff --git a/extract-files.py b/extract-files.py
+index 4df9ea2..5f28e76 100755
+--- a/extract-files.py
++++ b/extract-files.py
+@@ -277,7 +277,7 @@ module = ExtractUtilsModule(
+     blob_fixups=blob_fixups,
+     namespace_imports=namespace_imports,
+     check_elf=True,
+-    add_firmware_proprietary_file=True,
++    add_firmware_proprietary_file=False,
+ )
+ 
+ if __name__ == '__main__':
+diff --git a/init/init.houji.rc b/init/init.houji.rc
+new file mode 100644
+index 0000000..446d07a
+--- /dev/null
++++ b/init/init.houji.rc
+@@ -0,0 +1,8 @@
++# Copyright (C) 2022-2023 The LineageOS Project
++#
++# SPDX-License-Identifier: Apache-2.0
++
++# Euicc
++on post-fs && property:ro.boot.hwc=CN
++    # Remove euicc stuffs on CN Variant
++    mount none /dev/null /odm/overlay/HoujiEuiccOverlay.apk bind
+diff --git a/overlays/HoujiEuiccOverlay/Android.bp b/overlays/HoujiEuiccOverlay/Android.bp
+new file mode 100644
+index 0000000..dfd2d7a
+--- /dev/null
++++ b/overlays/HoujiEuiccOverlay/Android.bp
+@@ -0,0 +1,10 @@
++//
++// Copyright (C) 2023 The LineageOS Project
++//
++// SPDX-License-Identifier: Apache-2.0
++//
++
++runtime_resource_overlay {
++    name: "HoujiEuiccOverlay",
++    device_specific: true,
++}
+\ No newline at end of file
+diff --git a/overlays/HoujiEuiccOverlay/AndroidManifest.xml b/overlays/HoujiEuiccOverlay/AndroidManifest.xml
+new file mode 100644
+index 0000000..aeba369
+--- /dev/null
++++ b/overlays/HoujiEuiccOverlay/AndroidManifest.xml
+@@ -0,0 +1,16 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     Copyright (C) 2022 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<manifest
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    package="android.overlay.xiaomi.euicc.houji">
++
++    <overlay
++        android:isStatic="true"
++        android:priority="801"
++        android:targetPackage="android"
++        android:requiredSystemPropertyName="ro.product.model"
++        android:requiredSystemPropertyValue="+(23127PN0CG)" />
++</manifest>
+diff --git a/overlays/HoujiEuiccOverlay/res/values/arrays.xml b/overlays/HoujiEuiccOverlay/res/values/arrays.xml
+new file mode 100644
+index 0000000..a19bb0c
+--- /dev/null
++++ b/overlays/HoujiEuiccOverlay/res/values/arrays.xml
+@@ -0,0 +1,24 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     Copyright (C) 2020 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <!-- Device-specific array of SIM slot indexes which are are embedded eUICCs.
++         e.g. If a device has two physical slots with indexes 0, 1, and slot 1 is an
++         eUICC, then the value of this array should be:
++             <integer-array name="non_removable_euicc_slots">
++                 <item>1</item>
++             </integer-array>
++         If a device has three physical slots and slot 1 and 2 are eUICCs, then the value of
++         this array should be:
++             <integer-array name="non_removable_euicc_slots">
++                <item>1</item>
++                <item>2</item>
++             </integer-array>
++         This is used to differentiate between removable eUICCs and built in eUICCs, and should
++         be set by OEMs for devices which use eUICCs. -->
++    <integer-array name="non_removable_euicc_slots">
++        <item>1</item>
++    </integer-array>
++</resources>
+diff --git a/overlays/HoujiEuiccOverlay/res/values/config.xml b/overlays/HoujiEuiccOverlay/res/values/config.xml
+new file mode 100644
+index 0000000..bbf10df
+--- /dev/null
++++ b/overlays/HoujiEuiccOverlay/res/values/config.xml
+@@ -0,0 +1,28 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     Copyright (C) 2024 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
++    <!-- An array of device capabilities defined by GSMA SGP.22 v2.0.
++         The first item is the capability name that the device supports. The second item is the
++         major version. The minor and revision versions are default to 0s.
++         The device capabilities and their definition in the spec are:
++             gsm : gsmSupportedRelease
++             utran : utranSupportedRelease
++             cdma1x : cdma2000onexSupportedRelease
++             hrpd : cdma2000hrpdSupportedRelease
++             ehrpd : cdma2000ehrpdSupportedRelease
++             eutran : eutranSupportedRelease
++             nfc : contactlessSupportedRelease
++             crl : rspCrlSupportedVersion
++             nrepc : nrEpcSupportedRelease
++             nr5gc : nr5gcSupportedRelease
++             eutran5gc : eutran5gcSupportedRelease
++    -->
++    <string-array name="config_telephonyEuiccDeviceCapabilities">
++        <item>gsm,8</item>
++        <item>utran,9</item>
++        <item>eutran,15</item>
++    </string-array>
++</resources>
+\ No newline at end of file
+diff --git a/yaap_houji.mk b/yaap_houji.mk
+index 3f0b998..a6be470 100644
+--- a/yaap_houji.mk
++++ b/yaap_houji.mk
+@@ -18,7 +18,7 @@ PRODUCT_NAME := yaap_houji
+ PRODUCT_DEVICE := houji
+ PRODUCT_MANUFACTURER := Xiaomi
+ PRODUCT_BRAND := Xiaomi
+-PRODUCT_MODEL := 23127PN0CC
++PRODUCT_MODEL := Xiaomi 14
+ 
+ PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := true
+ 
+-- 
+2.56.1
+

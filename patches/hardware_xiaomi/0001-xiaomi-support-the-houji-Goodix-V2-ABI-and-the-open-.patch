@@ -1,0 +1,2091 @@
+From d4c89feb0589c4c7532372e8ad4141bab160b46e Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 14:28:07 -0400
+Subject: [PATCH 1/2] xiaomi: support the houji Goodix V2 ABI and the open eSIM
+ stack
+
+Keep the vendor Goodix module identity and decode V2 enumerate and remove messages with the vendor array layout.
+Import the LineageOS XiaomiEsimSwitcher source without depending on the Google eSIM policy package.
+---
+ EsimSwitcher/Android.bp                       |  25 ++
+ EsimSwitcher/AndroidManifest.xml              |  59 ++++
+ .../privapp_whitelist_com.xiaomi.mtb.xml      |   6 +
+ .../res/drawable/ic_sim_card_download.xml     |  27 ++
+ EsimSwitcher/res/values-az/strings.xml        |  14 +
+ EsimSwitcher/res/values-ca/strings.xml        |  14 +
+ EsimSwitcher/res/values-ckb/strings.xml       |  14 +
+ EsimSwitcher/res/values-de/strings.xml        |  14 +
+ EsimSwitcher/res/values-el/strings.xml        |  14 +
+ EsimSwitcher/res/values-en-rAU/strings.xml    |  14 +
+ EsimSwitcher/res/values-en-rCA/strings.xml    |  14 +
+ EsimSwitcher/res/values-en-rGB/strings.xml    |  14 +
+ EsimSwitcher/res/values-en-rIN/strings.xml    |  14 +
+ EsimSwitcher/res/values-es/strings.xml        |  14 +
+ EsimSwitcher/res/values-fa/strings.xml        |  14 +
+ EsimSwitcher/res/values-fr/strings.xml        |  14 +
+ EsimSwitcher/res/values-ga-rIE/strings.xml    |  14 +
+ EsimSwitcher/res/values-hu/strings.xml        |  14 +
+ EsimSwitcher/res/values-in/strings.xml        |  13 +
+ EsimSwitcher/res/values-it/strings.xml        |  14 +
+ EsimSwitcher/res/values-iw/strings.xml        |  14 +
+ EsimSwitcher/res/values-ja/strings.xml        |  13 +
+ EsimSwitcher/res/values-nn-rNO/strings.xml    |  14 +
+ EsimSwitcher/res/values-pl/strings.xml        |  14 +
+ EsimSwitcher/res/values-pt-rBR/strings.xml    |  14 +
+ EsimSwitcher/res/values-pt-rPT/strings.xml    |  14 +
+ EsimSwitcher/res/values-ro/strings.xml        |  14 +
+ EsimSwitcher/res/values-ru/strings.xml        |  14 +
+ EsimSwitcher/res/values-sl/strings.xml        |  14 +
+ EsimSwitcher/res/values-sq/strings.xml        |  14 +
+ EsimSwitcher/res/values-ta/strings.xml        |  14 +
+ EsimSwitcher/res/values-ug/strings.xml        |  14 +
+ EsimSwitcher/res/values-vi/strings.xml        |  14 +
+ EsimSwitcher/res/values-zh-rCN/strings.xml    |  14 +
+ EsimSwitcher/res/values-zh-rHK/strings.xml    |  13 +
+ EsimSwitcher/res/values/strings.xml           |  17 ++
+ EsimSwitcher/res/xml/settings_esim.xml        |  21 ++
+ .../com/xiaomi/mtb/BootCompletedReceiver.kt   |  58 ++++
+ .../src/com/xiaomi/mtb/EsimController.kt      | 288 ++++++++++++++++++
+ .../com/xiaomi/mtb/EsimSettingsActivity.kt    |  26 ++
+ .../com/xiaomi/mtb/EsimSettingsFragment.kt    |  59 ++++
+ README.md                                     |   2 +-
+ aidl/fingerprint/Android.bp                   |  31 --
+ aidl/fingerprint/Session.cpp                  |  56 ++--
+ aidl/fingerprint/Session.h                    |   6 +-
+ fingerprint/Android.bp                        |  33 ++
+ fingerprint/include/UdfpsHandler.h            |   6 +-
+ ...{fingerprint-legacy.h => fingerprint-v2.h} | 133 +++++---
+ fingerprint/include/fingerprint.h             | 127 +++-----
+ 49 files changed, 1223 insertions(+), 188 deletions(-)
+ create mode 100644 EsimSwitcher/Android.bp
+ create mode 100644 EsimSwitcher/AndroidManifest.xml
+ create mode 100644 EsimSwitcher/privapp_whitelist_com.xiaomi.mtb.xml
+ create mode 100644 EsimSwitcher/res/drawable/ic_sim_card_download.xml
+ create mode 100644 EsimSwitcher/res/values-az/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ca/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ckb/strings.xml
+ create mode 100644 EsimSwitcher/res/values-de/strings.xml
+ create mode 100644 EsimSwitcher/res/values-el/strings.xml
+ create mode 100644 EsimSwitcher/res/values-en-rAU/strings.xml
+ create mode 100644 EsimSwitcher/res/values-en-rCA/strings.xml
+ create mode 100644 EsimSwitcher/res/values-en-rGB/strings.xml
+ create mode 100644 EsimSwitcher/res/values-en-rIN/strings.xml
+ create mode 100644 EsimSwitcher/res/values-es/strings.xml
+ create mode 100644 EsimSwitcher/res/values-fa/strings.xml
+ create mode 100644 EsimSwitcher/res/values-fr/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ga-rIE/strings.xml
+ create mode 100644 EsimSwitcher/res/values-hu/strings.xml
+ create mode 100644 EsimSwitcher/res/values-in/strings.xml
+ create mode 100644 EsimSwitcher/res/values-it/strings.xml
+ create mode 100644 EsimSwitcher/res/values-iw/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ja/strings.xml
+ create mode 100644 EsimSwitcher/res/values-nn-rNO/strings.xml
+ create mode 100644 EsimSwitcher/res/values-pl/strings.xml
+ create mode 100644 EsimSwitcher/res/values-pt-rBR/strings.xml
+ create mode 100644 EsimSwitcher/res/values-pt-rPT/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ro/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ru/strings.xml
+ create mode 100644 EsimSwitcher/res/values-sl/strings.xml
+ create mode 100644 EsimSwitcher/res/values-sq/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ta/strings.xml
+ create mode 100644 EsimSwitcher/res/values-ug/strings.xml
+ create mode 100644 EsimSwitcher/res/values-vi/strings.xml
+ create mode 100644 EsimSwitcher/res/values-zh-rCN/strings.xml
+ create mode 100644 EsimSwitcher/res/values-zh-rHK/strings.xml
+ create mode 100644 EsimSwitcher/res/values/strings.xml
+ create mode 100644 EsimSwitcher/res/xml/settings_esim.xml
+ create mode 100644 EsimSwitcher/src/com/xiaomi/mtb/BootCompletedReceiver.kt
+ create mode 100644 EsimSwitcher/src/com/xiaomi/mtb/EsimController.kt
+ create mode 100644 EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsActivity.kt
+ create mode 100644 EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsFragment.kt
+ rename fingerprint/include/{fingerprint-legacy.h => fingerprint-v2.h} (71%)
+
+diff --git a/EsimSwitcher/Android.bp b/EsimSwitcher/Android.bp
+new file mode 100644
+index 0000000..fe0a572
+--- /dev/null
++++ b/EsimSwitcher/Android.bp
+@@ -0,0 +1,25 @@
++//
++// SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++// SPDX-FileCopyrightText: 2026 The LineageOS Project
++// SPDX-License-Identifier: Apache-2.0
++//
++
++android_app {
++    name: "XiaomiEsimSwitcher",
++    certificate: "platform",
++    srcs: ["src/**/*.kt"],
++    platform_apis: true,
++    privileged: true,
++    privapp_allowlist: "privapp_whitelist_com.xiaomi.mtb.xml",
++    system_ext_specific: true,
++    static_libs: [
++        "androidx.core_core",
++        "androidx.preference_preference",
++        "org.lineageos.settings.resources",
++        "SettingsLib",
++    ],
++    optional_uses_libs: [
++        "com.qualcomm.qcrilhook",
++        "com.qti.extphone.extphonelib",
++    ],
++}
+diff --git a/EsimSwitcher/AndroidManifest.xml b/EsimSwitcher/AndroidManifest.xml
+new file mode 100644
+index 0000000..e04c12b
+--- /dev/null
++++ b/EsimSwitcher/AndroidManifest.xml
+@@ -0,0 +1,59 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<manifest xmlns:android="http://schemas.android.com/apk/res/android"
++    package="com.xiaomi.mtb"
++    android:versionCode="1"
++    android:versionName="1.0"
++    android:sharedUserId="android.uid.system">
++    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
++
++    <application
++        android:label="@string/app_name"
++        android:persistent="true"
++        android:defaultToDeviceProtectedStorage="true"
++        android:directBootAware="true"
++        android:theme="@style/Theme.SubSettingsBase.Expressive">
++
++        <uses-library
++            android:name="com.qualcomm.qcrilhook"
++            android:exported="true"
++            android:required="false"/>
++        <uses-library
++            android:name="com.qti.extphone.extphonelib"
++            android:exported="true"
++            android:required="false"/>
++
++        <receiver
++            android:name=".BootCompletedReceiver"
++            android:exported="true"
++            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
++            <intent-filter>
++                <action android:name="android.intent.action.BOOT_COMPLETED" />
++                <category android:name="android.intent.category.DEFAULT" />
++            </intent-filter>
++        </receiver>
++
++        <activity
++            android:name=".EsimSettingsActivity"
++            android:configChanges="orientation|screenSize"
++            android:exported="true"
++            android:label="@string/esim_title">
++            <intent-filter>
++                <action android:name="com.android.settings.action.IA_SETTINGS" />
++            </intent-filter>
++            <meta-data
++                android:name="com.android.settings.category"
++                android:value="com.android.settings.category.ia.wireless" />
++            <meta-data
++                android:name="com.android.settings.icon"
++                android:resource="@drawable/ic_sim_card_download" />
++            <meta-data
++                android:name="com.android.settings.order"
++                android:value="-10" />
++        </activity>
++    </application>
++</manifest>
+diff --git a/EsimSwitcher/privapp_whitelist_com.xiaomi.mtb.xml b/EsimSwitcher/privapp_whitelist_com.xiaomi.mtb.xml
+new file mode 100644
+index 0000000..13f23f9
+--- /dev/null
++++ b/EsimSwitcher/privapp_whitelist_com.xiaomi.mtb.xml
+@@ -0,0 +1,6 @@
++<?xml version="1.0" encoding="utf-8"?>
++<permissions>
++    <privapp-permissions package="com.xiaomi.mtb">
++        <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
++    </privapp-permissions>
++</permissions>
+diff --git a/EsimSwitcher/res/drawable/ic_sim_card_download.xml b/EsimSwitcher/res/drawable/ic_sim_card_download.xml
+new file mode 100644
+index 0000000..9be7813
+--- /dev/null
++++ b/EsimSwitcher/res/drawable/ic_sim_card_download.xml
+@@ -0,0 +1,27 @@
++<!--
++  Copyright (C) 2022 The Android Open Source Project
++
++  Licensed under the Apache License, Version 2.0 (the "License");
++  you may not use this file except in compliance with the License.
++  You may obtain a copy of the License at
++
++       http://www.apache.org/licenses/LICENSE-2.0
++
++  Unless required by applicable law or agreed to in writing, software
++  distributed under the License is distributed on an "AS IS" BASIS,
++  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++  See the License for the specific language governing permissions and
++  limitations under the License.
++  -->
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++        android:width="24dp"
++        android:height="24dp"
++        android:viewportWidth="24"
++        android:viewportHeight="24"
++        android:tint="?android:attr/colorControlNormal"
++>
++    <path android:fillColor="@android:color/white"
++          android:pathData="M18,2h-8L4,8v12c0,1.1 0.9,2 2,2h12c1.1,0 2,-0.9 2,-2V4C20,2.9 19.1,2 18,2zM18,4v16H6V8.83L10.83,4H18z"/>
++    <path android:fillColor="@android:color/white"
++          android:pathData="M16,13l-4,4l-4,-4l1.41,-1.41L11,13.17V9.02L13,9v4.17l1.59,-1.59L16,13z"/>
++</vector>
+diff --git a/EsimSwitcher/res/values-az/strings.xml b/EsimSwitcher/res/values-az/strings.xml
+new file mode 100644
+index 0000000..1c4ffcd
+--- /dev/null
++++ b/EsimSwitcher/res/values-az/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Dəyişdirici</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM-i fəallaşdır</string>
++    <string name="esim_warning_title">eSIM istifadədədir</string>
++    <string name="esim_warning_message">Davam etməzdən əvvəl hazırkı eSIM profilinizi sıradan çıxardın və ya xaric edin</string>
++    <string name="esim_footer_note">eSIM-i fəallaşdırsanız, ikinci fiziki SIM yuvası sıradan çıxacaq</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ca/strings.xml b/EsimSwitcher/res/values-ca/strings.xml
+new file mode 100644
+index 0000000..89f8291
+--- /dev/null
++++ b/EsimSwitcher/res/values-ca/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Commutador d\'eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Activa l\'eSIM</string>
++    <string name="esim_warning_title">eSIM en ús</string>
++    <string name="esim_warning_message">Desactiveu o elimineu el perfil d\'eSIM actual abans de continuar</string>
++    <string name="esim_footer_note">En activar l\'eSIM, es deshabilitarà la segona ranura SIM física</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ckb/strings.xml b/EsimSwitcher/res/values-ckb/strings.xml
+new file mode 100644
+index 0000000..5cfd639
+--- /dev/null
++++ b/EsimSwitcher/res/values-ckb/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">گۆڕەری eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">چالاککردنی eSIM</string>
++    <string name="esim_warning_title">eSIM لەکاردایە</string>
++    <string name="esim_warning_message">تکایە پێش بەردەوامبوون، پڕۆفایلی ئێستای eSIM ناچالاک بکە یان لایببە</string>
++    <string name="esim_footer_note">چالاککردنی eSIM شوێنکەی دووەمی سیمکارت ناچالاک دەکات</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-de/strings.xml b/EsimSwitcher/res/values-de/strings.xml
+new file mode 100644
+index 0000000..ed176a3
+--- /dev/null
++++ b/EsimSwitcher/res/values-de/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Switcher</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM aktivieren</string>
++    <string name="esim_warning_title">eSIM wird verwendet</string>
++    <string name="esim_warning_message">Bitte deaktiviere oder lösche dein aktuelles eSIM-Profil, bevor du fortfährst</string>
++    <string name="esim_footer_note">Durch die Aktivierung der eSIM wird der zweite physische SIM-Kartensteckplatz deaktiviert</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-el/strings.xml b/EsimSwitcher/res/values-el/strings.xml
+new file mode 100644
+index 0000000..a39e443
+--- /dev/null
++++ b/EsimSwitcher/res/values-el/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Επιλογέας eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Ενεργοποίηση eSIM</string>
++    <string name="esim_warning_title">eSIM σε χρήση</string>
++    <string name="esim_warning_message">Παρακαλώ απενεργοποιήστε ή αφαιρέστε το τρέχον σας προφίλ eSIM πριν προχωρήσετε</string>
++    <string name="esim_footer_note">Με την ενεργοποίηση της eSIM θα απενεργοποιηθεί η δεύτερη υποδοχή φυσικής SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-en-rAU/strings.xml b/EsimSwitcher/res/values-en-rAU/strings.xml
+new file mode 100644
+index 0000000..75e39a2
+--- /dev/null
++++ b/EsimSwitcher/res/values-en-rAU/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Switcher</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Enable eSIM</string>
++    <string name="esim_warning_title">eSIM in use</string>
++    <string name="esim_warning_message">Please disable or remove your current eSIM profile before proceeding</string>
++    <string name="esim_footer_note">Enabling eSIM will disable the second physical SIM slot</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-en-rCA/strings.xml b/EsimSwitcher/res/values-en-rCA/strings.xml
+new file mode 100644
+index 0000000..75e39a2
+--- /dev/null
++++ b/EsimSwitcher/res/values-en-rCA/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Switcher</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Enable eSIM</string>
++    <string name="esim_warning_title">eSIM in use</string>
++    <string name="esim_warning_message">Please disable or remove your current eSIM profile before proceeding</string>
++    <string name="esim_footer_note">Enabling eSIM will disable the second physical SIM slot</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-en-rGB/strings.xml b/EsimSwitcher/res/values-en-rGB/strings.xml
+new file mode 100644
+index 0000000..75e39a2
+--- /dev/null
++++ b/EsimSwitcher/res/values-en-rGB/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Switcher</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Enable eSIM</string>
++    <string name="esim_warning_title">eSIM in use</string>
++    <string name="esim_warning_message">Please disable or remove your current eSIM profile before proceeding</string>
++    <string name="esim_footer_note">Enabling eSIM will disable the second physical SIM slot</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-en-rIN/strings.xml b/EsimSwitcher/res/values-en-rIN/strings.xml
+new file mode 100644
+index 0000000..75e39a2
+--- /dev/null
++++ b/EsimSwitcher/res/values-en-rIN/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM Switcher</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Enable eSIM</string>
++    <string name="esim_warning_title">eSIM in use</string>
++    <string name="esim_warning_message">Please disable or remove your current eSIM profile before proceeding</string>
++    <string name="esim_footer_note">Enabling eSIM will disable the second physical SIM slot</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-es/strings.xml b/EsimSwitcher/res/values-es/strings.xml
+new file mode 100644
+index 0000000..3dcf2ac
+--- /dev/null
++++ b/EsimSwitcher/res/values-es/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Conmutador de eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Activar eSIM</string>
++    <string name="esim_warning_title">eSIM en uso</string>
++    <string name="esim_warning_message">Desactiva o elimina tu perfil de eSIM actual antes de continuar</string>
++    <string name="esim_footer_note">Al activar la eSIM, se desactivará la segunda ranura física de la SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-fa/strings.xml b/EsimSwitcher/res/values-fa/strings.xml
+new file mode 100644
+index 0000000..f28a468
+--- /dev/null
++++ b/EsimSwitcher/res/values-fa/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">تعویض سیم‌کارت مجازی</string>
++    <string name="esim_title">سیم‌مجازی</string>
++    <string name="esim_enable_name">فعال‌سازی سیم‌مجازی</string>
++    <string name="esim_warning_title">سیم‌کارت مجازی در کار</string>
++    <string name="esim_warning_message">لطفاً قبل از ادامه، نمایه سیم کارت مجازی فعلی خود را غیرفعال یا حذف کنید</string>
++    <string name="esim_footer_note">فعال کردن سیم‌کارت مجازی باعث غیرفعال شدن درگاه سیم‌کارت فیزیکی دوم می‌شود.</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-fr/strings.xml b/EsimSwitcher/res/values-fr/strings.xml
+new file mode 100644
+index 0000000..69b2c11
+--- /dev/null
++++ b/EsimSwitcher/res/values-fr/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Commutateur eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Activer l\'eSIM</string>
++    <string name="esim_warning_title">eSIM activée</string>
++    <string name="esim_warning_message">Veuillez désactiver ou supprimer votre profil eSIM actuel avant de continuer</string>
++    <string name="esim_footer_note">L\'activation de l\'eSIM désactivera le deuxième emplacement pour carte SIM physique</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ga-rIE/strings.xml b/EsimSwitcher/res/values-ga-rIE/strings.xml
+new file mode 100644
+index 0000000..907ce1d
+--- /dev/null
++++ b/EsimSwitcher/res/values-ga-rIE/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Athróir eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Cumasaigh eSIM</string>
++    <string name="esim_warning_title">eSIM i úsáid</string>
++    <string name="esim_warning_message">Díchumasaigh nó bain do phróifíl eSIM reatha sula leanann tú ar aghaidh</string>
++    <string name="esim_footer_note">Má chumasaítear eSIM, díchumasófar an dara sliotán fisiceach SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-hu/strings.xml b/EsimSwitcher/res/values-hu/strings.xml
+new file mode 100644
+index 0000000..3eafa04
+--- /dev/null
++++ b/EsimSwitcher/res/values-hu/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM-váltó</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM engedélyezése</string>
++    <string name="esim_warning_title">eSIM használatban van</string>
++    <string name="esim_warning_message">Kérjük, a folytatás előtt tiltsa le vagy távolítsa el jelenlegi eSIM-profilját.</string>
++    <string name="esim_footer_note">Az eSIM bekapcsolása automatikusan letiltja a második fizikai SIM-foglalatot</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-in/strings.xml b/EsimSwitcher/res/values-in/strings.xml
+new file mode 100644
+index 0000000..3e66833
+--- /dev/null
++++ b/EsimSwitcher/res/values-in/strings.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Aktifkan eSIM</string>
++    <string name="esim_warning_title">eSIM sedang digunakan</string>
++    <string name="esim_warning_message">Harap nonaktifkan atau hapus profil eSIM Anda saat ini sebelum melanjutkan</string>
++    <string name="esim_footer_note">Mengaktifkan eSIM akan menonaktifkan slot SIM fisik kedua</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-it/strings.xml b/EsimSwitcher/res/values-it/strings.xml
+new file mode 100644
+index 0000000..76fa123
+--- /dev/null
++++ b/EsimSwitcher/res/values-it/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Selettore eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Attiva eSIM</string>
++    <string name="esim_warning_title">eSIM in uso</string>
++    <string name="esim_warning_message">Disabilita o rimuovi il profilo eSIM corrente prima di procedere</string>
++    <string name="esim_footer_note">Attivare la eSIM disabiliterà la seconda SIM fisica</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-iw/strings.xml b/EsimSwitcher/res/values-iw/strings.xml
+new file mode 100644
+index 0000000..e761aa4
+--- /dev/null
++++ b/EsimSwitcher/res/values-iw/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">מחליף eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">הפעלת eSIM</string>
++    <string name="esim_warning_title">eSIM בשימוש</string>
++    <string name="esim_warning_message">יש להשבית או להסיר את פרופיל ה‑eSIM הנוכחי לפני המשך הפעולה</string>
++    <string name="esim_footer_note">הפעלת eSIM תשבית את חריץ ה‑SIM הפיזי השני</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ja/strings.xml b/EsimSwitcher/res/values-ja/strings.xml
+new file mode 100644
+index 0000000..2c8a1ef
+--- /dev/null
++++ b/EsimSwitcher/res/values-ja/strings.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM を有効化</string>
++    <string name="esim_warning_title">eSIM 使用中</string>
++    <string name="esim_warning_message">続行する前に現在の eSIM プロファイルを無効にするか削除してください</string>
++    <string name="esim_footer_note">eSIM を有効にすると2番目の物理 SIM スロットが無効になります</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-nn-rNO/strings.xml b/EsimSwitcher/res/values-nn-rNO/strings.xml
+new file mode 100644
+index 0000000..48f65ba
+--- /dev/null
++++ b/EsimSwitcher/res/values-nn-rNO/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM-vekslar</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Slå på eSIM</string>
++    <string name="esim_warning_title">eSIM er i bruk</string>
++    <string name="esim_warning_message">Slå av eller fjern den noverande eSIM-profilen din før du går vidare</string>
++    <string name="esim_footer_note">Om du slår på eSIM, blir den andre fysiske SIM-kortplassen slått av</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-pl/strings.xml b/EsimSwitcher/res/values-pl/strings.xml
+new file mode 100644
+index 0000000..e9e05b1
+--- /dev/null
++++ b/EsimSwitcher/res/values-pl/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Przełącznik eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Włącz eSIM</string>
++    <string name="esim_warning_title">eSIM w użyciu</string>
++    <string name="esim_warning_message">Proszę wyłączyć lub usunąć aktualny profil eSIM przed kontynuowaniem</string>
++    <string name="esim_footer_note">Włączenie eSIM spowoduje wyłączenie drugiego, fizycznego gniazda karty SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-pt-rBR/strings.xml b/EsimSwitcher/res/values-pt-rBR/strings.xml
+new file mode 100644
+index 0000000..b0108ce
+--- /dev/null
++++ b/EsimSwitcher/res/values-pt-rBR/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Alternador de eSIMs</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Ativar eSIM</string>
++    <string name="esim_warning_title">eSIM em uso</string>
++    <string name="esim_warning_message">Desative ou remova o seu perfil do seu eSIM atual antes de continuar</string>
++    <string name="esim_footer_note">Ao ativar o eSIM, o segundo slot de SIM físico será desativado</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-pt-rPT/strings.xml b/EsimSwitcher/res/values-pt-rPT/strings.xml
+new file mode 100644
+index 0000000..c093a83
+--- /dev/null
++++ b/EsimSwitcher/res/values-pt-rPT/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Alternador de eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Ativar eSIM</string>
++    <string name="esim_warning_title">eSIM em uso</string>
++    <string name="esim_warning_message">Por favor, desative ou remova o perfil atual do eSIM antes de prosseguir</string>
++    <string name="esim_footer_note">Ativar o eSIM irá desativar o compartimento físico do segundo SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ro/strings.xml b/EsimSwitcher/res/values-ro/strings.xml
+new file mode 100644
+index 0000000..5d305e1
+--- /dev/null
++++ b/EsimSwitcher/res/values-ro/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Comutator eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Activare eSIM</string>
++    <string name="esim_warning_title">Cartela eSIM în utilizare</string>
++    <string name="esim_warning_message">Vă rugăm să dezactivați sau să eliminați profilul dvs. eSIM curent înainte de a continua</string>
++    <string name="esim_footer_note">Activarea eSIM va dezactiva al doilea slot fizic pentru SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ru/strings.xml b/EsimSwitcher/res/values-ru/strings.xml
+new file mode 100644
+index 0000000..b0876cd
+--- /dev/null
++++ b/EsimSwitcher/res/values-ru/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Переключатель eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Включить eSIM</string>
++    <string name="esim_warning_title">eSIM используется</string>
++    <string name="esim_warning_message">Прежде чем продолжить, отключите или удалите текущий профиль eSIM</string>
++    <string name="esim_footer_note">Включение eSIM приведет к отключению физического слота для второй  SIM-карты</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-sl/strings.xml b/EsimSwitcher/res/values-sl/strings.xml
+new file mode 100644
+index 0000000..9887777
+--- /dev/null
++++ b/EsimSwitcher/res/values-sl/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM preklopnik</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Omogoči eSIM</string>
++    <string name="esim_warning_title">eSIM v uporabi</string>
++    <string name="esim_warning_message">Onemogočite ali odstranite vaš trenutni eSIM profil preden nadaljujete</string>
++    <string name="esim_footer_note">Omogočenje eSIM bo onemogočilo drugo fizično režo SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-sq/strings.xml b/EsimSwitcher/res/values-sq/strings.xml
+new file mode 100644
+index 0000000..30ba14e
+--- /dev/null
++++ b/EsimSwitcher/res/values-sq/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Ndërruesi i eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Aktivizo eSIM</string>
++    <string name="esim_warning_title">eSIM është në përdorim</string>
++    <string name="esim_warning_message">Ju lutemi çaktivizoni ose hiqni profilin tuaj aktual të eSIM përpara se të vazhdoni</string>
++    <string name="esim_footer_note">Aktivizimi i eSIM do të çaktivizojë vendin e dytë fizik të kartës SIM</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ta/strings.xml b/EsimSwitcher/res/values-ta/strings.xml
+new file mode 100644
+index 0000000..4e9da7d
+--- /dev/null
++++ b/EsimSwitcher/res/values-ta/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM மாற்றி</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM-ஐச் செயல்படுத்துக</string>
++    <string name="esim_warning_title">eSIM செயல்பாட்டில்</string>
++    <string name="esim_warning_message">தொடர்வதற்கு முன், உங்கள் தற்போதைய eSIM விவரக்குறிப்பை முடக்கவும் அல்லது நீக்கவும்</string>
++    <string name="esim_footer_note">eSIM-ஐச் செயல்படுத்துவது இரண்டாவது இயல் SIM துளையை முடக்கும்</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-ug/strings.xml b/EsimSwitcher/res/values-ug/strings.xml
+new file mode 100644
+index 0000000..7b7130a
+--- /dev/null
++++ b/EsimSwitcher/res/values-ug/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM ئالماشتۇرغۇچ</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">eSIM نى قوزغات</string>
++    <string name="esim_warning_title">eSIM ئىشلىتىلىۋاتىدۇ</string>
++    <string name="esim_warning_message">داۋاملاشتۇرۇشتىن ئىلگىرى نۆۋەتتىكى eSIM سەپلىمىسىنى چەكلەڭ ياكى چىقىرىۋېتىڭ</string>
++    <string name="esim_footer_note">eSIM قوزغىتىلسا ئىككىنچى فىزىكىلىق SIM ئوقۇرى چەكلىنىدۇ</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-vi/strings.xml b/EsimSwitcher/res/values-vi/strings.xml
+new file mode 100644
+index 0000000..5871c4c
+--- /dev/null
++++ b/EsimSwitcher/res/values-vi/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">Chuyển đổi eSIM</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Kích hoạt eSIM</string>
++    <string name="esim_warning_title">eSIM đang được sử dụng</string>
++    <string name="esim_warning_message">Vui lòng tắt hoặc xóa hồ sơ eSIM hiện tại trước khi tiếp tục</string>
++    <string name="esim_footer_note">Việc kích hoạt eSIM sẽ vô hiệu hóa khe SIM vật lý thứ hai</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-zh-rCN/strings.xml b/EsimSwitcher/res/values-zh-rCN/strings.xml
+new file mode 100644
+index 0000000..e026791
+--- /dev/null
++++ b/EsimSwitcher/res/values-zh-rCN/strings.xml
+@@ -0,0 +1,14 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM 卡切换器</string>
++    <string name="esim_title">eSIM 卡</string>
++    <string name="esim_enable_name">启用 eSIM 卡</string>
++    <string name="esim_warning_title">eSIM 卡正在使用</string>
++    <string name="esim_warning_message">请先禁用或删除您当前的 eSIM 配置，然后再继续操作。</string>
++    <string name="esim_footer_note">启用 eSIM 将会禁用第二个物理 SIM 卡槽。</string>
++</resources>
+diff --git a/EsimSwitcher/res/values-zh-rHK/strings.xml b/EsimSwitcher/res/values-zh-rHK/strings.xml
+new file mode 100644
+index 0000000..07b6833
+--- /dev/null
++++ b/EsimSwitcher/res/values-zh-rHK/strings.xml
+@@ -0,0 +1,13 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <string name="app_name">eSIM 切換工具</string>
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">啟用 eSIM</string>
++    <string name="esim_warning_title">正在使用 eSIM</string>
++    <string name="esim_footer_note">啟用 eSIM 將會停用第二個實體 SIM 卡槽。</string>
++</resources>
+diff --git a/EsimSwitcher/res/values/strings.xml b/EsimSwitcher/res/values/strings.xml
+new file mode 100644
+index 0000000..c4e58f9
+--- /dev/null
++++ b/EsimSwitcher/res/values/strings.xml
+@@ -0,0 +1,17 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<resources>
++    <!-- App Name -->
++    <string name="app_name">eSIM Switcher</string>
++
++    <!-- ESIM -->
++    <string name="esim_title">eSIM</string>
++    <string name="esim_enable_name">Enable eSIM</string>
++    <string name="esim_warning_title">eSIM in use</string>
++    <string name="esim_warning_message">Please disable or remove your current eSIM profile before proceeding</string>
++    <string name="esim_footer_note">Enabling eSIM will disable the second physical SIM slot</string>
++</resources>
+diff --git a/EsimSwitcher/res/xml/settings_esim.xml b/EsimSwitcher/res/xml/settings_esim.xml
+new file mode 100644
+index 0000000..e0f0a23
+--- /dev/null
++++ b/EsimSwitcher/res/xml/settings_esim.xml
+@@ -0,0 +1,21 @@
++<?xml version="1.0" encoding="utf-8"?>
++<!--
++     SPDX-FileCopyrightText: 2025 Paranoid Android
++     SPDX-FileCopyrightText: 2026 The LineageOS Project
++     SPDX-License-Identifier: Apache-2.0
++-->
++<PreferenceScreen
++    xmlns:android="http://schemas.android.com/apk/res/android"
++    android:title="@string/esim_title">
++
++    <com.android.settingslib.widget.MainSwitchPreference
++        android:key="esim_enable"
++        android:title="@string/esim_enable_name"
++        android:enabled="false" />
++
++    <com.android.settingslib.widget.FooterPreference
++        android:key="esim_footer"
++        android:title="@string/esim_footer_note"
++        android:selectable="false" />
++
++</PreferenceScreen>
+diff --git a/EsimSwitcher/src/com/xiaomi/mtb/BootCompletedReceiver.kt b/EsimSwitcher/src/com/xiaomi/mtb/BootCompletedReceiver.kt
+new file mode 100644
+index 0000000..0ac49d3
+--- /dev/null
++++ b/EsimSwitcher/src/com/xiaomi/mtb/BootCompletedReceiver.kt
+@@ -0,0 +1,58 @@
++/*
++ * SPDX-FileCopyrightText: 2023-2025 Paranoid Android
++ * SPDX-FileCopyrightText: 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.mtb
++
++import android.content.BroadcastReceiver
++import android.content.ComponentName
++import android.content.Context
++import android.content.Intent
++import android.content.pm.PackageManager
++import android.util.Log
++
++class BootCompletedReceiver : BroadcastReceiver() {
++
++    companion object {
++        private const val TAG = "EsimSwitcher"
++        private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
++    }
++
++    override fun onReceive(context: Context, intent: Intent) {
++        if (DEBUG) Log.d(TAG, "Received boot completed intent: ${intent.action}")
++        if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
++            val hasNonRemovableEuicc =
++                context.resources
++                    .getIntArray(com.android.internal.R.array.non_removable_euicc_slots)
++                    .isNotEmpty()
++            Log.i(TAG, "eSIM supported: $hasNonRemovableEuicc")
++
++            setComponentEnabled(
++                context,
++                EsimSettingsActivity::class.java.name,
++                hasNonRemovableEuicc,
++            )
++
++            if (hasNonRemovableEuicc) {
++                EsimController.getInstance(context).onBootCompleted()
++            }
++        }
++    }
++
++    private fun setComponentEnabled(context: Context, component: String, enabled: Boolean) {
++        val name = ComponentName(context, component)
++        val pm = context.packageManager
++        val newState =
++            if (enabled) {
++                PackageManager.COMPONENT_ENABLED_STATE_ENABLED
++            } else {
++                PackageManager.COMPONENT_ENABLED_STATE_DISABLED
++            }
++
++        if (pm.getComponentEnabledSetting(name) != newState) {
++            pm.setComponentEnabledSetting(name, newState, PackageManager.DONT_KILL_APP)
++        }
++    }
++}
+diff --git a/EsimSwitcher/src/com/xiaomi/mtb/EsimController.kt b/EsimSwitcher/src/com/xiaomi/mtb/EsimController.kt
+new file mode 100644
+index 0000000..880d88f
+--- /dev/null
++++ b/EsimSwitcher/src/com/xiaomi/mtb/EsimController.kt
+@@ -0,0 +1,288 @@
++/*
++ * SPDX-FileCopyrightText: 2025 Paranoid Android
++ * SPDX-FileCopyrightText: 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.mtb
++
++import android.app.ActivityThread
++import android.content.Context
++import android.telephony.SubscriptionManager
++import android.util.Log
++import dalvik.system.DexClassLoader
++import java.io.File
++import java.lang.reflect.InvocationHandler
++import java.lang.reflect.Method
++import java.lang.reflect.Proxy
++
++class EsimController private constructor(private val context: Context) {
++
++    companion object {
++        private const val TAG = "EsimController"
++        private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
++
++        private const val MIRILHOOK_CLASS_NAME = "com.xiaomi.mirilhook.MiRilHook"
++        private const val MIRILHOOK_JAR_PATH = "/system_ext/framework/xiaomi-modem-common.jar"
++        private const val MIRILHOOK_JAR_PATH_FALLBACK = "/system_ext/framework/mirilhook.jar"
++        private const val MIRILHOOKCALLBACK_CLASS_NAME = "com.xiaomi.mirilhook.MiRilHookCallback"
++        private const val QCRILHOOK_JAR_PATH = "/system_ext/framework/qcrilhook.jar"
++        private const val QCRILHOOKCALLBACK_CLASS_NAME = "com.qualcomm.qcrilhook.QcRilHookCallback"
++
++        @Volatile private var instance: EsimController? = null
++
++        fun getInstance(context: Context): EsimController {
++            return instance
++                ?: synchronized(this) {
++                    instance ?: EsimController(context.applicationContext).also { instance = it }
++                }
++        }
++    }
++
++    private var miRilHookCallbackClass: Class<*>? = null
++    private var miRilHookCallbackObj: Any? = null
++    private var miRilHookClass: Class<*>? = null
++    private var miRilHookObj: Any? = null
++    private var miRilJarLoader: DexClassLoader? = null
++    private var qcRilHookCallbackClass: Class<*>? = null
++    private var qcRilHookCallbackObj: Any? = null
++    private var qcRilJarLoader: DexClassLoader? = null
++
++    fun onBootCompleted() {
++        if (DEBUG) Log.d(TAG, "onBootCompleted")
++        setupHook()
++    }
++
++    fun getEsimActive(): Boolean {
++        val subscriptionManager =
++            context.getSystemService(Context.TELEPHONY_SUBSCRIPTION_SERVICE) as? SubscriptionManager
++        val subscriptionInfoList = subscriptionManager?.activeSubscriptionInfoList ?: return false
++
++        for (subscriptionInfo in subscriptionInfoList) {
++            if (subscriptionInfo.isEmbedded) {
++                if (DEBUG)
++                    Log.d(
++                        TAG,
++                        "Found eSIM profile: ${subscriptionInfo.displayName}, ${subscriptionInfo.carrierName}",
++                    )
++                return true
++            }
++        }
++        if (DEBUG) Log.d(TAG, "No eSIM profiles found.")
++        return false
++    }
++
++    fun getEsimEnabled(): Boolean {
++        return (callMiRilHookMethod("onGetEsimStatus", -1) as? Int ?: -1) == 0
++    }
++
++    fun setEsimEnabled(isEnabled: Boolean) {
++        if (DEBUG) Log.d(TAG, "setEsimEnabled, isEnabled = $isEnabled")
++        callMiRilHookMethod("onHookUimPowerReqEx", false, 0, 2, -1)
++        callMiRilHookMethod("onSetEsimStatus", -1, if (isEnabled) 0 else 1, true)
++        callMiRilHookMethod("onHookUimPowerReqEx", false, 1, 2, if (isEnabled) 1 else 0)
++    }
++
++    private fun setupHook() {
++        if (DEBUG) Log.d(TAG, "setupHook, context = $context")
++
++        if (File(MIRILHOOK_JAR_PATH).exists()) {
++            setupHookPrimary()
++        } else {
++            setupHookFallback()
++        }
++    }
++
++    private fun setupHookPrimary() {
++        if (DEBUG) Log.d(TAG, "setupHookPrimary")
++
++        miRilJarLoader =
++            miRilJarLoader
++                ?: runCatching {
++                        DexClassLoader(
++                            MIRILHOOK_JAR_PATH,
++                            context.getDir("jar", 0).absolutePath,
++                            null,
++                            context.classLoader,
++                        )
++                    }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to initialize miRilJarLoader: $e")
++                    }
++                    .getOrNull()
++
++        miRilHookClass =
++            miRilHookClass
++                ?: runCatching { miRilJarLoader?.loadClass(MIRILHOOK_CLASS_NAME) }
++                    .onFailure { e -> if (DEBUG) Log.d(TAG, "Failed to load miRilHookClass: $e") }
++                    .getOrNull()
++
++        miRilHookCallbackClass =
++            miRilHookCallbackClass
++                ?: runCatching { miRilJarLoader?.loadClass(MIRILHOOKCALLBACK_CLASS_NAME) }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to load miRilHookCallbackClass: $e")
++                    }
++                    .getOrNull()
++
++        miRilHookCallbackObj =
++            miRilHookCallbackObj
++                ?: runCatching {
++                        Proxy.newProxyInstance(
++                            miRilJarLoader,
++                            arrayOf(miRilHookCallbackClass),
++                            MiRilHookCallbackProxy(),
++                        )
++                    }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to create miRilHookCallbackObj: $e")
++                    }
++                    .getOrNull()
++
++        miRilHookObj =
++            miRilHookObj
++                ?: miRilHookClass
++                    ?.getConstructor(
++                        Context::class.java,
++                        miRilHookCallbackClass,
++                        String::class.java,
++                    )
++                    ?.let { constructor ->
++                        runCatching {
++                                constructor.newInstance(
++                                    context,
++                                    miRilHookCallbackObj,
++                                    context.packageName,
++                                )
++                            }
++                            .onFailure { e ->
++                                if (DEBUG) Log.d(TAG, "Failed to initialize miRilHookObj: $e")
++                            }
++                            .getOrNull()
++                    }
++    }
++
++    private fun setupHookFallback() {
++        if (DEBUG) Log.d(TAG, "setupHookFallback")
++
++        miRilJarLoader =
++            miRilJarLoader
++                ?: runCatching {
++                        DexClassLoader(
++                            MIRILHOOK_JAR_PATH_FALLBACK,
++                            context.getDir("jar", 0).absolutePath,
++                            null,
++                            context.classLoader,
++                        )
++                    }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to initialize miRilJarLoader: $e")
++                    }
++                    .getOrNull()
++
++        miRilHookClass =
++            miRilHookClass
++                ?: runCatching { miRilJarLoader?.loadClass(MIRILHOOK_CLASS_NAME) }
++                    .onFailure { e -> if (DEBUG) Log.d(TAG, "Failed to load miRilHookClass: $e") }
++                    .getOrNull()
++
++        qcRilJarLoader =
++            qcRilJarLoader
++                ?: runCatching {
++                        DexClassLoader(
++                            QCRILHOOK_JAR_PATH,
++                            context.getDir("jar", 0).absolutePath,
++                            null,
++                            context.classLoader,
++                        )
++                    }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to initialize qcRilJarLoader: $e")
++                    }
++                    .getOrNull()
++
++        qcRilHookCallbackClass =
++            qcRilHookCallbackClass
++                ?: runCatching { qcRilJarLoader?.loadClass(QCRILHOOKCALLBACK_CLASS_NAME) }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to load qcRilHookCallbackClass: $e")
++                    }
++                    .getOrNull()
++
++        qcRilHookCallbackObj =
++            qcRilHookCallbackObj
++                ?: runCatching {
++                        Proxy.newProxyInstance(
++                            context.classLoader,
++                            arrayOf(qcRilHookCallbackClass),
++                            QcRilHookCbMethodProxy(),
++                        )
++                    }
++                    .onFailure { e ->
++                        if (DEBUG) Log.d(TAG, "Failed to initialize qcRilHookCallbackObj: $e")
++                    }
++                    .getOrNull()
++
++        miRilHookObj =
++            miRilHookObj
++                ?: miRilHookClass
++                    ?.getConstructor(
++                        Context::class.java,
++                        qcRilHookCallbackClass,
++                        String::class.java,
++                    )
++                    ?.let { constructor ->
++                        runCatching {
++                                constructor.newInstance(
++                                    context,
++                                    qcRilHookCallbackObj,
++                                    ActivityThread.currentPackageName(),
++                                )
++                            }
++                            .onFailure { e ->
++                                if (DEBUG) Log.d(TAG, "Failed to initialize miRilHookObj: $e")
++                            }
++                            .getOrNull()
++                    }
++    }
++
++    private fun callMiRilHookMethod(methodName: String, defObj: Any?, vararg args: Any?): Any? {
++        return try {
++            val parameterTypes =
++                args
++                    .map { it?.javaClass?.kotlin?.javaPrimitiveType ?: it?.javaClass }
++                    .toTypedArray()
++            miRilHookClass?.getMethod(methodName, *parameterTypes)?.invoke(miRilHookObj, *args)
++        } catch (e: Exception) {
++            if (DEBUG) Log.d(TAG, "callMiRilHookMethod failed: $methodName, error: $e")
++            defObj
++        }
++    }
++
++    fun dispose() {
++        if (DEBUG) Log.d(TAG, "dispose")
++        try {
++            miRilHookClass?.getMethod("dispose")?.invoke(miRilHookObj)
++        } catch (e: Exception) {
++            if (DEBUG) Log.d(TAG, "dispose method failed, error: $e")
++        }
++    }
++
++    inner class QcRilHookCbMethodProxy : InvocationHandler {
++        override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
++            val methodName = method.name
++            if (DEBUG) Log.d(TAG, "QcRilHookCbMethodProxy callbackMethod name: $methodName")
++            when (methodName) {
++                "onQcRilHookReady" -> {}
++            }
++            return null
++        }
++    }
++
++    inner class MiRilHookCallbackProxy : InvocationHandler {
++        override fun invoke(proxy: Any, method: Method, args: Array<Any?>?): Any? {
++            if (DEBUG) Log.d(TAG, "MiRilHookCallbackProxy: ${method.name}")
++            return null
++        }
++    }
++}
+diff --git a/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsActivity.kt b/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsActivity.kt
+new file mode 100644
+index 0000000..a52365a
+--- /dev/null
++++ b/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsActivity.kt
+@@ -0,0 +1,26 @@
++/*
++ * SPDX-FileCopyrightText: 2025 Paranoid Android
++ * SPDX-FileCopyrightText: 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.mtb
++
++import android.os.Bundle
++import com.android.settingslib.collapsingtoolbar.CollapsingToolbarBaseActivity
++import com.android.settingslib.collapsingtoolbar.R
++
++class EsimSettingsActivity : CollapsingToolbarBaseActivity() {
++
++    companion object {
++        private const val TAG = "EsimSettingsActivity"
++    }
++
++    override fun onCreate(savedInstanceState: Bundle?) {
++        super.onCreate(savedInstanceState)
++        supportFragmentManager
++            .beginTransaction()
++            .replace(R.id.content_frame, EsimSettingsFragment(), TAG)
++            .commit()
++    }
++}
+diff --git a/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsFragment.kt b/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsFragment.kt
+new file mode 100644
+index 0000000..53dae2d
+--- /dev/null
++++ b/EsimSwitcher/src/com/xiaomi/mtb/EsimSettingsFragment.kt
+@@ -0,0 +1,59 @@
++/*
++ * SPDX-FileCopyrightText: 2025 Paranoid Android
++ * SPDX-FileCopyrightText: 2026 The LineageOS Project
++ * SPDX-License-Identifier: Apache-2.0
++ */
++
++package com.xiaomi.mtb
++
++import android.os.Bundle
++import android.util.Log
++import androidx.appcompat.app.AlertDialog
++import androidx.preference.Preference
++import com.android.settingslib.widget.FooterPreference
++import com.android.settingslib.widget.MainSwitchPreference
++import com.android.settingslib.widget.SettingsBasePreferenceFragment
++
++class EsimSettingsFragment :
++    SettingsBasePreferenceFragment(), Preference.OnPreferenceChangeListener {
++
++    companion object {
++        private const val TAG = "EsimSettingsFragment"
++        private val DEBUG = Log.isLoggable(TAG, Log.DEBUG)
++    }
++
++    private val esimController by lazy { EsimController.getInstance(requireContext()) }
++
++    private val switchBar by lazy { findPreference<MainSwitchPreference>("esim_enable")!! }
++    private val footerPref by lazy { findPreference<FooterPreference>("esim_footer")!! }
++
++    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
++        if (DEBUG) Log.d(TAG, "onCreatePreferences")
++        setPreferencesFromResource(R.xml.settings_esim, rootKey)
++
++        switchBar.onPreferenceChangeListener = this
++        switchBar.isChecked = esimController.getEsimEnabled()
++        switchBar.isEnabled = true
++        footerPref.title = getString(R.string.esim_footer_note)
++    }
++
++    override fun onPreferenceChange(preference: Preference, newValue: Any?): Boolean {
++        if (preference == switchBar) {
++            val isChecked = newValue as Boolean
++            if (DEBUG) Log.d(TAG, "onPreferenceChange: $isChecked")
++            if (esimController.getEsimActive()) {
++                if (isChecked) return false
++                AlertDialog.Builder(requireContext())
++                    .setTitle(R.string.esim_warning_title)
++                    .setMessage(R.string.esim_warning_message)
++                    .setPositiveButton(android.R.string.ok, null)
++                    .setCancelable(false)
++                    .show()
++                return false
++            } else {
++                esimController.setEsimEnabled(isChecked)
++            }
++        }
++        return true
++    }
++}
+diff --git a/README.md b/README.md
+index cd0531a..6aa285f 100644
+--- a/README.md
++++ b/README.md
+@@ -5,5 +5,5 @@
+ | Namespace | Variable | Description | Default |
+ | --------- | -------- | ----------- | ------- |
+ | XIAOMI_BIOMETRICS_FINGERPRINT | RUN_32BIT | Opt to run service in 32-bit mode only | false |
+-| XIAOMI_BIOMETRICS_FINGERPRINT | USE_NEW_IMPL | Use new fingerprint implementation (Android 14+) | false |
++| XIAOMI_BIOMETRICS_FINGERPRINT | IMPL_VER | Fingerprint HAL implementation version (`V1` legacy, `V2` generate_challenge/revoke_challenge/remove(fids) module API) | V1 |
+ | XIAOMI_TOUCH | HIGH_TOUCH_POLLING_PATH | HighTouchPollingRate feature control path | |
+diff --git a/aidl/fingerprint/Android.bp b/aidl/fingerprint/Android.bp
+index e4c8c23..939390a 100644
+--- a/aidl/fingerprint/Android.bp
++++ b/aidl/fingerprint/Android.bp
+@@ -5,37 +5,6 @@
+ // SPDX-License-Identifier: Apache-2.0
+ //
+ 
+-soong_config_module_type {
+-    name: "xiaomi_hardware_biometrics_config_default",
+-    module_type: "cc_defaults",
+-    config_namespace: "XIAOMI_BIOMETRICS_FINGERPRINT",
+-    bool_variables: [
+-        "RUN_32BIT",
+-        "USE_NEW_IMPL",
+-    ],
+-    properties: [
+-        "compile_multilib",
+-        "cflags",
+-    ],
+-}
+-
+-xiaomi_hardware_biometrics_config_default {
+-    name: "xiaomi_hardware_biometrics_config_default",
+-
+-    soong_config_variables: {
+-        RUN_32BIT: {
+-            conditions_default: {
+-                compile_multilib: "64",
+-            },
+-            compile_multilib: "prefer32",
+-        },
+-
+-        USE_NEW_IMPL: {
+-            cflags: ["-DDEVICE_USES_NEW_IMPLEMENTATION"],
+-        },
+-    },
+-}
+-
+ cc_binary {
+     name: "android.hardware.biometrics.fingerprint-service.xiaomi",
+     defaults: ["xiaomi_hardware_biometrics_config_default"],
+diff --git a/aidl/fingerprint/Session.cpp b/aidl/fingerprint/Session.cpp
+index 1cb7506..005a79b 100644
+--- a/aidl/fingerprint/Session.cpp
++++ b/aidl/fingerprint/Session.cpp
+@@ -36,7 +36,7 @@ Session::Session(fingerprint_device_t* device, UdfpsHandler* udfpsHandler, int u
+ }
+ 
+ ndk::ScopedAStatus Session::generateChallenge() {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     uint64_t challenge = mDevice->pre_enroll(mDevice);
+     mCb->onChallengeGenerated(challenge);
+ #else
+@@ -50,7 +50,7 @@ ndk::ScopedAStatus Session::generateChallenge() {
+ ndk::ScopedAStatus Session::revokeChallenge(int64_t challenge) {
+     ALOGI("revokeChallenge: %ld", challenge);
+ 
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     mDevice->post_enroll(mDevice);
+     mCb->onChallengeRevoked(challenge);
+ #else
+@@ -64,7 +64,7 @@ ndk::ScopedAStatus Session::enroll(const HardwareAuthToken& hat,
+                                    std::shared_ptr<ICancellationSignal>* out) {
+     hw_auth_token_t authToken;
+     translate(hat, authToken);
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     int error = mDevice->enroll(mDevice, &authToken, mUserId, 60);
+ #else
+     int error = mDevice->enroll(mDevice, &authToken);
+@@ -81,7 +81,7 @@ ndk::ScopedAStatus Session::enroll(const HardwareAuthToken& hat,
+ ndk::ScopedAStatus Session::authenticate(int64_t operationId,
+                                          std::shared_ptr<ICancellationSignal>* out) {
+     checkSensorLockout();
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     int error = mDevice->authenticate(mDevice, operationId, mUserId);
+ #else
+     int error = mDevice->authenticate(mDevice, operationId);
+@@ -115,7 +115,7 @@ ndk::ScopedAStatus Session::enumerateEnrollments() {
+ ndk::ScopedAStatus Session::removeEnrollments(const std::vector<int32_t>& enrollmentIds) {
+     ALOGI("removeEnrollments, size: %zu", enrollmentIds.size());
+ 
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     for (int32_t fid : enrollmentIds) {
+         int error = mDevice->remove(mDevice, mUserId, fid);
+         if (error) {
+@@ -135,14 +135,14 @@ ndk::ScopedAStatus Session::removeEnrollments(const std::vector<int32_t>& enroll
+ ndk::ScopedAStatus Session::getAuthenticatorId() {
+     uint64_t auth_id = mDevice->get_authenticator_id(mDevice);
+     ALOGI("getAuthenticatorId: %ld", auth_id);
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     mCb->onAuthenticatorIdRetrieved(auth_id);
+ #endif
+     return ndk::ScopedAStatus::ok();
+ }
+ 
+ ndk::ScopedAStatus Session::invalidateAuthenticatorId() {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+     uint64_t auth_id = mDevice->get_authenticator_id(mDevice);
+     mCb->onAuthenticatorIdInvalidated(auth_id);
+ #else
+@@ -153,7 +153,7 @@ ndk::ScopedAStatus Session::invalidateAuthenticatorId() {
+ }
+ 
+ ndk::ScopedAStatus Session::resetLockout(const HardwareAuthToken& hat) {
+-#ifdef DEVICE_USES_NEW_IMPLEMENTATION
++#ifdef IMPL_V2
+     hw_auth_token_t authToken;
+     translate(hat, authToken);
+ 
+@@ -386,7 +386,7 @@ void Session::notify(const fingerprint_msg_t* msg) {
+             }
+         } break;
+         case FINGERPRINT_TEMPLATE_ENROLLING: {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+             ALOGD("onEnrollResult(fid=%d, gid=%d, rem=%d)", msg->data.enroll.finger.fid,
+                   msg->data.enroll.finger.gid, msg->data.enroll.samples_remaining);
+ #else
+@@ -398,19 +398,26 @@ void Session::notify(const fingerprint_msg_t* msg) {
+ 
+         } break;
+         case FINGERPRINT_TEMPLATE_REMOVED: {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+             ALOGD("onRemove(fid=%d, gid=%d, rem=%d)", msg->data.removed.finger.fid,
+                   msg->data.removed.finger.gid, msg->data.removed.remaining_templates);
+-#else
+-            ALOGD("onRemove(fid=%d, rem=%d)", msg->data.removed.finger.fid,
+-                  msg->data.removed.remaining_templates);
+-#endif
+             std::vector<int> enrollments;
+             enrollments.push_back(msg->data.removed.finger.fid);
+             mCb->onEnrollmentsRemoved(enrollments);
++#else
++            std::vector<int32_t> enrollments;
++            enrollments.reserve(NUM_FINGERS);
++            for (unsigned int i = 0; i < NUM_FINGERS; i++) {
++                int32_t fid = msg->data.removed.fingers[i].fid;
++                if (!fid) break;
++                ALOGD("onRemove(fid=%d)", fid);
++                enrollments.push_back(fid);
++            }
++            mCb->onEnrollmentsRemoved(enrollments);
++#endif
+         } break;
+         case FINGERPRINT_AUTHENTICATED: {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+             ALOGD("onAuthenticated(fid=%d, gid=%d)", msg->data.authenticated.finger.fid,
+                   msg->data.authenticated.finger.gid);
+ #else
+@@ -436,21 +443,28 @@ void Session::notify(const fingerprint_msg_t* msg) {
+             }
+         } break;
+         case FINGERPRINT_TEMPLATE_ENUMERATING: {
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
++#ifndef IMPL_V2
+             ALOGD("onEnumerate(fid=%d, gid=%d, rem=%d)", msg->data.enumerated.finger.fid,
+                   msg->data.enumerated.finger.gid, msg->data.enumerated.remaining_templates);
+-#else
+-            ALOGD("onEnumerate(fid=%d, rem=%d)", msg->data.enumerated.finger.fid,
+-                  msg->data.enumerated.remaining_templates);
+-#endif
+             static std::vector<int> enrollments;
+             enrollments.push_back(msg->data.enumerated.finger.fid);
+             if (msg->data.enumerated.remaining_templates == 0) {
+                 mCb->onEnrollmentsEnumerated(enrollments);
+                 enrollments.clear();
+             }
++#else
++            std::vector<int32_t> enrollments;
++            enrollments.reserve(NUM_FINGERS);
++            for (unsigned int i = 0; i < NUM_FINGERS; i++) {
++                int32_t fid = msg->data.enumerated.fingers[i].fid;
++                if (!fid) break;
++                ALOGD("onEnumerate(fid=%d)", fid);
++                enrollments.push_back(fid);
++            }
++            mCb->onEnrollmentsEnumerated(enrollments);
++#endif
+         } break;
+-#ifdef DEVICE_USES_NEW_IMPLEMENTATION
++#ifdef IMPL_V2
+         case FINGERPRINT_CHALLENGE_GENERATED: {
+             ALOGD("onChallengeGenerated(%lu)", msg->data.challenge.value);
+             mCb->onChallengeGenerated(msg->data.challenge.value);
+diff --git a/aidl/fingerprint/Session.h b/aidl/fingerprint/Session.h
+index 26bbfa5..025abe6 100644
+--- a/aidl/fingerprint/Session.h
++++ b/aidl/fingerprint/Session.h
+@@ -12,10 +12,10 @@
+ #include <android/log.h>
+ #include <hardware/hardware.h>
+ #include <log/log.h>
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
+-#include "fingerprint-legacy.h"
+-#else
++#ifndef IMPL_V2
+ #include "fingerprint.h"
++#else
++#include "fingerprint-v2.h"
+ #endif
+ 
+ #include "LockoutTracker.h"
+diff --git a/fingerprint/Android.bp b/fingerprint/Android.bp
+index 33fa6cb..cbc26d5 100644
+--- a/fingerprint/Android.bp
++++ b/fingerprint/Android.bp
+@@ -4,11 +4,44 @@
+ // SPDX-License-Identifier: Apache-2.0
+ //
+ 
++soong_config_module_type {
++    name: "xiaomi_hardware_biometrics_config_default",
++    module_type: "cc_defaults",
++    config_namespace: "XIAOMI_BIOMETRICS_FINGERPRINT",
++    bool_variables: [
++        "RUN_32BIT",
++    ],
++    value_variables: [
++        "IMPL_VER",
++    ],
++    properties: [
++        "compile_multilib",
++        "cppflags",
++    ],
++}
++
++xiaomi_hardware_biometrics_config_default {
++    name: "xiaomi_hardware_biometrics_config_default",
++
++    soong_config_variables: {
++        RUN_32BIT: {
++            conditions_default: {
++                compile_multilib: "64",
++            },
++            compile_multilib: "prefer32",
++        },
++        IMPL_VER: {
++            cppflags: ["-DIMPL_%s"],
++        },
++    },
++}
++
+ cc_library_static {
+     name: "libudfpshandlerfactory",
+     srcs: ["UdfpsHandler.cpp"],
+     vendor: true,
+     header_libs: ["xiaomifingerprint_headers"],
++    defaults: ["xiaomi_hardware_biometrics_config_default"],
+ }
+ 
+ cc_library_headers {
+diff --git a/fingerprint/include/UdfpsHandler.h b/fingerprint/include/UdfpsHandler.h
+index eead8bd..78f2368 100644
+--- a/fingerprint/include/UdfpsHandler.h
++++ b/fingerprint/include/UdfpsHandler.h
+@@ -7,10 +7,10 @@
+ #pragma once
+ 
+ #include <stdint.h>
+-#ifndef DEVICE_USES_NEW_IMPLEMENTATION
+-#include "fingerprint-legacy.h"
+-#else
++#ifndef IMPL_V2
+ #include "fingerprint.h"
++#else
++#include "fingerprint-v2.h"
+ #endif
+ 
+ class UdfpsHandler {
+diff --git a/fingerprint/include/fingerprint-legacy.h b/fingerprint/include/fingerprint-v2.h
+similarity index 71%
+rename from fingerprint/include/fingerprint-legacy.h
+rename to fingerprint/include/fingerprint-v2.h
+index 156f6cd..022486c 100644
+--- a/fingerprint/include/fingerprint-legacy.h
++++ b/fingerprint/include/fingerprint-v2.h
+@@ -16,6 +16,8 @@
+ #define FINGERPRINT_MODULE_API_VERSION_3_0 HARDWARE_MODULE_API_VERSION(3, 0)
+ #define FINGERPRINT_HARDWARE_MODULE_ID "fingerprint"
+ 
++#define NUM_FINGERS 5
++
+ typedef enum fingerprint_msg_type {
+     FINGERPRINT_ERROR = -1,
+     FINGERPRINT_ACQUIRED = 1,
+@@ -23,6 +25,11 @@ typedef enum fingerprint_msg_type {
+     FINGERPRINT_TEMPLATE_REMOVED = 4,
+     FINGERPRINT_AUTHENTICATED = 5,
+     FINGERPRINT_TEMPLATE_ENUMERATING = 6,
++    FINGERPRINT_CHALLENGE_GENERATED = 7,
++    FINGERPRINT_CHALLENGE_REVOKED = 8,
++    FINGERPRINT_AUTHENTICATOR_ID_RETRIEVED = 9,
++    FINGERPRINT_AUTHENTICATOR_ID_INVALIDATED = 10,
++    FINGERPRINT_RESET_LOCKOUT = 11,
+ } fingerprint_msg_type_t;
+ 
+ /*
+@@ -68,7 +75,6 @@ typedef enum fingerprint_acquired_info {
+ } fingerprint_acquired_info_t;
+ 
+ typedef struct fingerprint_finger_id {
+-    uint32_t gid;
+     uint32_t fid;
+ } fingerprint_finger_id_t;
+ 
+@@ -81,8 +87,7 @@ typedef struct fingerprint_enroll {
+ } fingerprint_enroll_t;
+ 
+ typedef struct fingerprint_iterator {
+-    fingerprint_finger_id_t finger;
+-    uint32_t remaining_templates;
++    fingerprint_finger_id_t fingers[NUM_FINGERS];
+ } fingerprint_iterator_t;
+ 
+ typedef fingerprint_iterator_t fingerprint_enumerated_t;
+@@ -97,6 +102,14 @@ typedef struct fingerprint_authenticated {
+     hw_auth_token_t hat;
+ } fingerprint_authenticated_t;
+ 
++typedef struct fingerprint_authenticator {
++    uint64_t id;
++} fingerprint_authenticator_t;
++
++typedef struct fingerprint_challenge {
++    uint64_t value;
++} fingerprint_challenge_t;
++
+ typedef struct fingerprint_msg {
+     fingerprint_msg_type_t type;
+     union {
+@@ -106,6 +119,8 @@ typedef struct fingerprint_msg {
+         fingerprint_removed_t removed;
+         fingerprint_acquired_t acquired;
+         fingerprint_authenticated_t authenticated;
++        fingerprint_authenticator_t authenticator;
++        fingerprint_challenge_t challenge;
+     } data;
+ } fingerprint_msg_t;
+ 
+@@ -140,16 +155,26 @@ typedef struct fingerprint_device {
+     int (*set_notify)(struct fingerprint_device* dev, fingerprint_notify_t notify);
+ 
+     /*
+-     * Fingerprint pre-enroll enroll request:
+-     * Generates a unique token to upper layers to indicate the start of an enrollment transaction.
+-     * This token will be wrapped by security for verification and passed to enroll() for
+-     * verification before enrollment will be allowed. This is to ensure adding a new fingerprint
+-     * template was preceded by some kind of credential confirmation (e.g. device password).
++     * Fingerprint generate challenge:
++     * Begins a secure transaction request. Note that the challenge by itself is not useful. It only
++     * becomes useful when wrapped in a verifiable message such as a HardwareAuthToken.
++     *
++     * Notify with:
++     *  message type: FINGERPRINT_CHALLENGE_GENERATED(7)
++     *          data: uint64_t challenge
++     */
++    uint64_t (*generate_challenge)(struct fingerprint_device* dev);
++
++    /*
++     * Fingerprint revoke challenge:
++     * Revokes a challenge that was previously generated. Note that if a non-existent challenge is
++     * provided, the HAL must still notify the framework using ISessionCallback#onChallengeRevoked.
+      *
+-     * Function return: 0 if function failed
+-     *                  otherwise, a uint64_t of token
++     * Notify with:
++     *  message type: FINGERPRINT_CHALLENGE_REVOKED(8)
++     *          data: uint64_t challenge
+      */
+-    uint64_t (*pre_enroll)(struct fingerprint_device* dev);
++    int (*revoke_challenge)(struct fingerprint_device* dev, uint64_t challenge);
+ 
+     /*
+      * Fingerprint enroll request:
+@@ -165,18 +190,7 @@ typedef struct fingerprint_device {
+      *                  or a negative number in case of error, generally from the errno.h set.
+      *                  A notify() function may be called indicating the error condition.
+      */
+-    int (*enroll)(struct fingerprint_device* dev, const hw_auth_token_t* hat, uint32_t gid,
+-                  uint32_t timeout_sec);
+-
+-    /*
+-     * Finishes the enroll operation and invalidates the pre_enroll() generated challenge.
+-     * This will be called at the end of a multi-finger enrollment session to indicate
+-     * that no more fingers will be added.
+-     *
+-     * Function return: 0 if the request is accepted
+-     *                  or a negative number in case of error, generally from the errno.h set.
+-     */
+-    int (*post_enroll)(struct fingerprint_device* dev);
++    int (*enroll)(struct fingerprint_device* dev, const hw_auth_token_t* hat);
+ 
+     /*
+      * get_authenticator_id:
+@@ -188,6 +202,18 @@ typedef struct fingerprint_device {
+      */
+     uint64_t (*get_authenticator_id)(struct fingerprint_device* dev);
+ 
++    /*
++     * invalidate_authenticator_id:
++     * This operation only applies to sensors that are configured as SensorStrength::STRONG. If
++     * invoked by the framework for sensors of other strengths, the HAL should immediately invoke
++     * ISessionCallback#onAuthenticatorIdInvalidated.
++     *
++     * Notify with:
++     *  message type: FINGERPRINT_AUTHENTICATOR_ID_INVALIDATED(10)
++     *          data: long newAuthenticatorId
++     */
++    uint64_t (*invalidate_authenticator_id)(struct fingerprint_device* dev);
++
+     /*
+      * Cancel pending enroll or authenticate, sending FINGERPRINT_ERROR_CANCELED
+      * to all running clients. Switches the HAL state machine back to the idle state.
+@@ -214,22 +240,18 @@ typedef struct fingerprint_device {
+     int (*enumerate)(struct fingerprint_device* dev);
+ 
+     /*
+-     * Fingerprint remove request:
+-     * Deletes a fingerprint template.
+-     * Works only within the path set by set_active_group().
+-     * The fid parameter can be used as a widcard:
+-     *   * fid == 0 -- delete all the templates in the group.
+-     *   * fid != 0 -- delete this specific template from the group.
+-     * For each template found a notify() will be called with:
+-     * fingerprint_msg.type == FINGERPRINT_TEMPLATE_REMOVED
+-     * fingerprint_msg.data.removed.finger indicating a template id deleted
+-     * fingerprint_msg.data.removed.remaining_templates indicating how many more
+-     * templates will be deleted by this operation.
++     * remove:
++     * A request to remove the enrollments for this (sensorId, userId) pair.
+      *
+-     * Function return: 0 if fingerprint template(s) can be successfully deleted
+-     *                  or a negative number in case of error, generally from the errno.h set.
++     * Notify with:
++     *  message type: FINGERPRINT_TEMPLATE_REMOVED(4)
++     *          data: { int enrollment,
++     *                  int remaining_templates}
++     *
++     * @param fids a list of enrollments that should be removed.
++     * @param count the count need to be removed
+      */
+-    int (*remove)(struct fingerprint_device* dev, uint32_t gid, uint32_t fid);
++    int (*remove)(struct fingerprint_device* dev, uint32_t* fids, uint32_t count);
+ 
+     /*
+      * Restricts the HAL operation to a set of fingerprints belonging to a
+@@ -240,7 +262,8 @@ typedef struct fingerprint_device {
+      * Function return: 0 on success
+      *                  or a negative number in case of error, generally from the errno.h set.
+      */
+-    int (*set_active_group)(struct fingerprint_device* dev, uint32_t gid, const char *store_path);
++    int (*set_active_group)(struct fingerprint_device* dev, uint32_t userid,
++                            const char* store_path);
+ 
+     /*
+      * Authenticates an operation identifed by operation_id
+@@ -248,7 +271,39 @@ typedef struct fingerprint_device {
+      * Function return: 0 on success
+      *                  or a negative number in case of error, generally from the errno.h set.
+      */
+-    int (*authenticate)(struct fingerprint_device* dev, uint64_t operation_id, uint32_t gid);
++    int (*authenticate)(struct fingerprint_device* dev, uint64_t operation_id);
++
++    /*
++     * Clears the lockout counter after verifying the provided HAT (Hardware Auth Token).
++     * If the HAT is invalid or expired, trigger an error via ISessionCallback#onError.
++     * Lockout can also clear automatically after a timeout.
++     * Notify with FINGERPRINT_RESET_LOCKOUT(11) and call ISessionCallback#onLockoutCleared when
++     * done.
++     */
++    int (*reset_lockout)(struct fingerprint_device* dev, const hw_auth_token_t* hat);
++
++    /*
++     * onPointerDown:
++     * This operation only applies to sensors that are configured as
++     * FingerprintSensorType::UNDER_DISPLAY_*. If invoked erroneously by the framework for sensors
++     * of other types, the HAL must treat this as a no-op and return immediately.
++     *
++     * @deprecated use onPointerDownWithContext instead.
++     * Also empty in Xiaomi's fingerprint module
++     */
++    void (*onPointerDown)(struct fingerprint_device* dev, int32_t pointerId, int32_t x, int32_t y,
++                          float minor, float major);
++
++    /*
++     * onPointerUp:
++     * This operation only applies to sensors that are configured as
++     * FingerprintSensorType::UNDER_DISPLAY_*. If invoked for sensors of other types, the HAL must
++     * treat this as a no-op and return immediately.
++     *
++     * @deprecated use onPointerUpWithContext instead.
++     * Also empty in Xiaomi's fingerprint module
++     */
++    void (*onPointerUp)(struct fingerprint_device* dev, int32_t pointerId);
+ 
+     /*
+      * Xiaomi fingerprint extension command.
+diff --git a/fingerprint/include/fingerprint.h b/fingerprint/include/fingerprint.h
+index c3dbad7..156f6cd 100644
+--- a/fingerprint/include/fingerprint.h
++++ b/fingerprint/include/fingerprint.h
+@@ -23,11 +23,6 @@ typedef enum fingerprint_msg_type {
+     FINGERPRINT_TEMPLATE_REMOVED = 4,
+     FINGERPRINT_AUTHENTICATED = 5,
+     FINGERPRINT_TEMPLATE_ENUMERATING = 6,
+-    FINGERPRINT_CHALLENGE_GENERATED = 7,
+-    FINGERPRINT_CHALLENGE_REVOKED = 8,
+-    FINGERPRINT_AUTHENTICATOR_ID_RETRIEVED = 9,
+-    FINGERPRINT_AUTHENTICATOR_ID_INVALIDATED = 10,
+-    FINGERPRINT_RESET_LOCKOUT = 11,
+ } fingerprint_msg_type_t;
+ 
+ /*
+@@ -73,6 +68,7 @@ typedef enum fingerprint_acquired_info {
+ } fingerprint_acquired_info_t;
+ 
+ typedef struct fingerprint_finger_id {
++    uint32_t gid;
+     uint32_t fid;
+ } fingerprint_finger_id_t;
+ 
+@@ -101,14 +97,6 @@ typedef struct fingerprint_authenticated {
+     hw_auth_token_t hat;
+ } fingerprint_authenticated_t;
+ 
+-typedef struct fingerprint_authenticator {
+-    uint64_t id;
+-} fingerprint_authenticator_t;
+-
+-typedef struct fingerprint_challenge {
+-    uint64_t value;
+-} fingerprint_challenge_t;
+-
+ typedef struct fingerprint_msg {
+     fingerprint_msg_type_t type;
+     union {
+@@ -118,8 +106,6 @@ typedef struct fingerprint_msg {
+         fingerprint_removed_t removed;
+         fingerprint_acquired_t acquired;
+         fingerprint_authenticated_t authenticated;
+-        fingerprint_authenticator_t authenticator;
+-        fingerprint_challenge_t challenge;
+     } data;
+ } fingerprint_msg_t;
+ 
+@@ -154,26 +140,16 @@ typedef struct fingerprint_device {
+     int (*set_notify)(struct fingerprint_device* dev, fingerprint_notify_t notify);
+ 
+     /*
+-     * Fingerprint generate challenge:
+-     * Begins a secure transaction request. Note that the challenge by itself is not useful. It only
+-     * becomes useful when wrapped in a verifiable message such as a HardwareAuthToken.
+-     *
+-     * Notify with:
+-     *  message type: FINGERPRINT_CHALLENGE_GENERATED(7)
+-     *          data: uint64_t challenge
+-     */
+-    uint64_t (*generate_challenge)(struct fingerprint_device* dev);
+-
+-    /*
+-     * Fingerprint revoke challenge:
+-     * Revokes a challenge that was previously generated. Note that if a non-existent challenge is
+-     * provided, the HAL must still notify the framework using ISessionCallback#onChallengeRevoked.
++     * Fingerprint pre-enroll enroll request:
++     * Generates a unique token to upper layers to indicate the start of an enrollment transaction.
++     * This token will be wrapped by security for verification and passed to enroll() for
++     * verification before enrollment will be allowed. This is to ensure adding a new fingerprint
++     * template was preceded by some kind of credential confirmation (e.g. device password).
+      *
+-     * Notify with:
+-     *  message type: FINGERPRINT_CHALLENGE_REVOKED(8)
+-     *          data: uint64_t challenge
++     * Function return: 0 if function failed
++     *                  otherwise, a uint64_t of token
+      */
+-    int (*revoke_challenge)(struct fingerprint_device* dev, uint64_t challenge);
++    uint64_t (*pre_enroll)(struct fingerprint_device* dev);
+ 
+     /*
+      * Fingerprint enroll request:
+@@ -189,7 +165,18 @@ typedef struct fingerprint_device {
+      *                  or a negative number in case of error, generally from the errno.h set.
+      *                  A notify() function may be called indicating the error condition.
+      */
+-    int (*enroll)(struct fingerprint_device* dev, const hw_auth_token_t *hat);
++    int (*enroll)(struct fingerprint_device* dev, const hw_auth_token_t* hat, uint32_t gid,
++                  uint32_t timeout_sec);
++
++    /*
++     * Finishes the enroll operation and invalidates the pre_enroll() generated challenge.
++     * This will be called at the end of a multi-finger enrollment session to indicate
++     * that no more fingers will be added.
++     *
++     * Function return: 0 if the request is accepted
++     *                  or a negative number in case of error, generally from the errno.h set.
++     */
++    int (*post_enroll)(struct fingerprint_device* dev);
+ 
+     /*
+      * get_authenticator_id:
+@@ -201,18 +188,6 @@ typedef struct fingerprint_device {
+      */
+     uint64_t (*get_authenticator_id)(struct fingerprint_device* dev);
+ 
+-    /*
+-     * invalidate_authenticator_id:
+-     * This operation only applies to sensors that are configured as SensorStrength::STRONG. If
+-     * invoked by the framework for sensors of other strengths, the HAL should immediately invoke
+-     * ISessionCallback#onAuthenticatorIdInvalidated.
+-     *
+-     * Notify with:
+-     *  message type: FINGERPRINT_AUTHENTICATOR_ID_INVALIDATED(10)
+-     *          data: long newAuthenticatorId
+-     */
+-    uint64_t (*invalidate_authenticator_id)(struct fingerprint_device* dev);
+-
+     /*
+      * Cancel pending enroll or authenticate, sending FINGERPRINT_ERROR_CANCELED
+      * to all running clients. Switches the HAL state machine back to the idle state.
+@@ -239,18 +214,22 @@ typedef struct fingerprint_device {
+     int (*enumerate)(struct fingerprint_device* dev);
+ 
+     /*
+-     * remove:
+-     * A request to remove the enrollments for this (sensorId, userId) pair.
+-     *
+-     * Notify with:
+-     *  message type: FINGERPRINT_TEMPLATE_REMOVED(4)
+-     *          data: { int enrollment,
+-     *                  int remaining_templates}
++     * Fingerprint remove request:
++     * Deletes a fingerprint template.
++     * Works only within the path set by set_active_group().
++     * The fid parameter can be used as a widcard:
++     *   * fid == 0 -- delete all the templates in the group.
++     *   * fid != 0 -- delete this specific template from the group.
++     * For each template found a notify() will be called with:
++     * fingerprint_msg.type == FINGERPRINT_TEMPLATE_REMOVED
++     * fingerprint_msg.data.removed.finger indicating a template id deleted
++     * fingerprint_msg.data.removed.remaining_templates indicating how many more
++     * templates will be deleted by this operation.
+      *
+-     * @param fids a list of enrollments that should be removed.
+-     * @param count the count need to be removed
++     * Function return: 0 if fingerprint template(s) can be successfully deleted
++     *                  or a negative number in case of error, generally from the errno.h set.
+      */
+-    int (*remove)(struct fingerprint_device* dev, uint32_t* fids, uint32_t count);
++    int (*remove)(struct fingerprint_device* dev, uint32_t gid, uint32_t fid);
+ 
+     /*
+      * Restricts the HAL operation to a set of fingerprints belonging to a
+@@ -261,7 +240,7 @@ typedef struct fingerprint_device {
+      * Function return: 0 on success
+      *                  or a negative number in case of error, generally from the errno.h set.
+      */
+-    int (*set_active_group)(struct fingerprint_device* dev, uint32_t userid,const char* store_path);
++    int (*set_active_group)(struct fingerprint_device* dev, uint32_t gid, const char *store_path);
+ 
+     /*
+      * Authenticates an operation identifed by operation_id
+@@ -269,39 +248,7 @@ typedef struct fingerprint_device {
+      * Function return: 0 on success
+      *                  or a negative number in case of error, generally from the errno.h set.
+      */
+-    int (*authenticate)(struct fingerprint_device* dev, uint64_t operation_id);
+-
+-    /*
+-     * Clears the lockout counter after verifying the provided HAT (Hardware Auth Token).
+-     * If the HAT is invalid or expired, trigger an error via ISessionCallback#onError.
+-     * Lockout can also clear automatically after a timeout.
+-     * Notify with FINGERPRINT_RESET_LOCKOUT(11) and call ISessionCallback#onLockoutCleared when
+-     * done.
+-     */
+-    int (*reset_lockout)(struct fingerprint_device* dev, const hw_auth_token_t *hat);
+-
+-    /*
+-     * onPointerDown:
+-     * This operation only applies to sensors that are configured as
+-     * FingerprintSensorType::UNDER_DISPLAY_*. If invoked erroneously by the framework for sensors
+-     * of other types, the HAL must treat this as a no-op and return immediately.
+-     *
+-     * @deprecated use onPointerDownWithContext instead.
+-     * Also empty in Xiaomi's fingerprint module
+-     */
+-    void (*onPointerDown)(struct fingerprint_device* dev, int32_t pointerId, int32_t x, int32_t y,
+-                          float minor, float major);
+-
+-    /*
+-     * onPointerUp:
+-     * This operation only applies to sensors that are configured as
+-     * FingerprintSensorType::UNDER_DISPLAY_*. If invoked for sensors of other types, the HAL must
+-     * treat this as a no-op and return immediately.
+-     *
+-     * @deprecated use onPointerUpWithContext instead.
+-     * Also empty in Xiaomi's fingerprint module
+-     */
+-    void (*onPointerUp)(struct fingerprint_device* dev, int32_t pointerId);
++    int (*authenticate)(struct fingerprint_device* dev, uint64_t operation_id, uint32_t gid);
+ 
+     /*
+      * Xiaomi fingerprint extension command.
+-- 
+2.56.1
+

@@ -1,0 +1,27 @@
+From 831b7f3e743fbade06ede9e8656a8a27c5d1251e Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 14:28:07 -0400
+Subject: [PATCH 02/10] houji: pair OpenEUICC with XiaomiEsimSwitcher
+
+Retain the CN resource-based eSIM gate and do not expose the Global-only eUICC overlay.
+---
+ device.mk | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/device.mk b/device.mk
+index b93759c..3dd01f0 100644
+--- a/device.mk
++++ b/device.mk
+@@ -16,7 +16,8 @@ $(call soong_config_set,qti_vibrator,effect_lib,//device/xiaomi/houji:libqtivibr
+ 
+ # eSIM: use YAAP's open-source LPA instead of a Google prebuilt.
+ PRODUCT_PACKAGES += \
+-    OpenEUICC
++    OpenEUICC \
++    XiaomiEsimSwitcher
+ 
+ # Soong namespaces
+ PRODUCT_SOONG_NAMESPACES += \
+-- 
+2.56.1
+

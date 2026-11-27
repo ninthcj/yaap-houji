@@ -1,0 +1,121 @@
+From dc8d07065ac3638560e84666e704580002d2193b Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Wed, 25 Nov 2026 11:59:36 -0400
+Subject: [PATCH 7/8] sm8650-common: label odm libcamxexternalformatutils
+ SP-HAL and allow atfwd lseek
+
+- Label /(odm|vendor)/lib64/libcamxexternalformatutils.so as same_process_hal_file
+  so cameraserver CallbackProcessor::convertFromFlexibleYuv can dlopen the /odm
+  target of /vendor/lib64/libcamxexternalformatutils.so without SELinux denial
+  and null-chroma SIGSEGV in Legacy Camera1 clients (WeChat, Pinduoduo).
+- Override /vendor/etc/seccomp_policy/atfwd@2.0.policy (and mirror in extract-files.py)
+  with lseek: 1 so ATFWD-daemon stops SIGSYS crash-looping under Android 17 bionic.
+---
+ common.mk                        |  5 ++++
+ configs/seccomp/atfwd@2.0.policy | 51 ++++++++++++++++++++++++++++++++
+ extract-files.py                 |  2 ++
+ sepolicy/vendor/file_contexts    |  1 +
+ 4 files changed, 59 insertions(+)
+ create mode 100644 configs/seccomp/atfwd@2.0.policy
+
+diff --git a/common.mk b/common.mk
+index d89d189..f852f9d 100644
+--- a/common.mk
++++ b/common.mk
+@@ -4,6 +4,11 @@
+ # SPDX-License-Identifier: Apache-2.0
+ #
+ 
++# Override stock atfwd seccomp policy lacking bionic lseek allowance
++# (must precede inherit-product so first PRODUCT_COPY_FILES entry wins)
++PRODUCT_COPY_FILES += \
++    device/xiaomi/sm8650-common/configs/seccomp/atfwd@2.0.policy:$(TARGET_COPY_OUT_VENDOR)/etc/seccomp_policy/atfwd@2.0.policy
++
+ # Call the proprietary setup.
+ $(call inherit-product, vendor/xiaomi/sm8650-common/sm8650-common-vendor.mk)
+ 
+diff --git a/configs/seccomp/atfwd@2.0.policy b/configs/seccomp/atfwd@2.0.policy
+new file mode 100644
+index 0000000..d460581
+--- /dev/null
++++ b/configs/seccomp/atfwd@2.0.policy
+@@ -0,0 +1,51 @@
++# SPDX-License-Identifier: Apache-2.0
++
++mmap: arg2 in ~PROT_EXEC || arg2 in ~PROT_WRITE
++munmap: 1
++getuid: 1
++writev: 1
++prctl: 1
++mprotect: arg2 in ~PROT_EXEC || arg2 in ~PROT_WRITE
++openat: 1
++futex: 1
++close: 1
++read: 1
++lseek: 1
++newfstatat: 1
++fstat: 1
++ioctl: 1
++mremap: 1
++readlinkat: 1
++pread64: 1
++fstatfs: 1
++rt_sigprocmask: 1
++faccessat: 1
++sendto: 1
++rt_sigaction: 1
++socket: arg0 == AF_UNIX || arg0 == AF_QIPCRTR
++recvfrom: 1
++getsockname: 1
++getdents64: 1
++fcntl: 1
++nanosleep: 1
++getrandom: 1
++clone: 1
++pipe2: 1
++exit_group: 1
++write: 1
++exit: 1
++getpid: 1
++sigaltstack: 1
++getrlimit: 1
++restart_syscall: 1
++setsockopt: 1
++sched_getscheduler: 1
++rt_sigreturn: 1
++execve: 1
++madvise: 1
++set_tid_address: 1
++connect: 1
++ppoll: 1
++clock_gettime: 1
++setpriority: 1
++gettid: 1
+diff --git a/extract-files.py b/extract-files.py
+index 5daea62..d065f85 100755
+--- a/extract-files.py
++++ b/extract-files.py
+@@ -153,6 +153,8 @@ blob_fixups: blob_fixups_user_type = {
+         .replace_needed('android.hardware.graphics.composer3-V2-ndk.so', 'android.hardware.graphics.composer3-V3-ndk.so'),
+     'system_ext/etc/init/qspa_system.rc': blob_fixup()
+         .regex_replace(r'\$\{ro\.boot\.vendor\.qspa:-default\}', 'default'),
++    'vendor/etc/seccomp_policy/atfwd@2.0.policy': blob_fixup()
++        .add_line_if_missing('lseek: 1'),
+ }  # fmt: skip
+ 
+ module = ExtractUtilsModule(
+diff --git a/sepolicy/vendor/file_contexts b/sepolicy/vendor/file_contexts
+index 4ad3a6a..0017b4d 100644
+--- a/sepolicy/vendor/file_contexts
++++ b/sepolicy/vendor/file_contexts
+@@ -11,6 +11,7 @@
+ /dev/camlog                                                                 u:object_r:camlog_device:s0
+ /(odm|vendor/odm|vendor|system/vendor)/bin/hw/misensor_camera                 u:object_r:vendor_hal_misensor_camera_default_exec:s0
+ /(odm|vendor)/bin/hw/vendor\.qti\.camera\.provider-service_64                 u:object_r:hal_camera_default_exec:s0
++/(odm|vendor)/lib64/libcamxexternalformatutils\.so                          u:object_r:same_process_hal_file:s0
+ /mnt/vendor/persist/camera(/.*)?                                              u:object_r:camera_persist_file:s0
+ /persist/camera(/.*)?                                                         u:object_r:camera_persist_file:s0
+ /data/vendor/perfspy(/.*)?                                                    u:object_r:vendor_camera_data_file:s0
+-- 
+2.56.1
+

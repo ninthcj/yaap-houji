@@ -1,0 +1,58 @@
+From 9145f448e93e5abda1f4dc31e453bfdfddba12fa Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 16:37:45 -0400
+Subject: [PATCH 04/10] houji: document stock kernel UAPI inputs
+
+---
+ docs/dev/stock-kernel.md | 16 ++++++++--------
+ 1 file changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/docs/dev/stock-kernel.md b/docs/dev/stock-kernel.md
+index c7d1662..6defcb8 100644
+--- a/docs/dev/stock-kernel.md
++++ b/docs/dev/stock-kernel.md
+@@ -3,7 +3,7 @@
+ ## 默认方案
+ 
+ 使用国行 `OS3.0.307.0.WNCCNXM` 的同套内核、DTB、DTBO 和模块构建
+-LineageOS；MiCode 6.1.25 源码及外置驱动移植保留为可选开发路径。
++YAAP；MiCode 源码内核移植是独立的开发路径，不用于此发布包。
+ 默认选择在 `configs/kernel/mode.mk`：
+ `HOUJI_BUILD_KERNEL_FROM_SOURCE ?= false`。要继续源码移植时将该默认值改为
+ `true`，并使用干净的产品输出，防止旧 .ko 或启动镜像混入。
+@@ -12,16 +12,17 @@ LineageOS；MiCode 6.1.25 源码及外置驱动移植保留为可选开发路径
+ 
+ - boot 中的 Image：`6.1.138-android14-11-g0c3d559bcd85-ab14529422`。
+ - vendor_boot 中连续排列的 4 份 DTB，字节和顺序保持原样。
+-- dtbo 中完整 DTBO 表和 entries，移除原厂填充与 AVB footer，由 Lineage 重新签名。
++- dtbo 中完整 DTBO 表和 entries，移除原厂填充与 AVB footer，由 YAAP 重新签名。
+ - vendor ramdisk 的 340 个模块，保留 boot/recovery 加载清单与 blocklist。
+ - vendor_dlkm 的 314 个模块、system_dlkm 的 60 个模块及原始依赖元数据。
+ 
+-用户空间编译需要的 UAPI 头文件仍从 MiCode 源码执行 headers_install 导出；
+-通过 TARGET_FORCE_PREBUILT_KERNEL 保证 Image 使用原厂文件，不编译源码内核
+-或源码模块。这些头文件用于编译用户空间，不替换原厂模块的 KMI 数据。
++用户空间头文件由 `headers_install` 导出。通用 UAPI 使用原厂 Image 标明的
++Android Common Kernel 6.1.138 版本；高通扩展的上游版本和 SHA-256 记录于
++`kernel/xiaomi/houji/include/uapi/houji-provenance.json`。`TARGET_FORCE_PREBUILT_KERNEL`
++保留原厂 Image 和模块，不编译或替换它们。
+ 
+ 不复用原厂整个 ramdisk、boot.img 或 vendor_boot.img。
+-Lineage 仍生成 init_boot、vendor_boot、recovery 以及 AVB 信息。
++YAAP 仍生成 init_boot、vendor_boot、recovery 以及 AVB 信息。
+ ramdisk/recovery 模块通过 Android 的 BOARD_*_KERNEL_MODULES 接口安装，
+ 不 strip，依赖表由 depmod 生成；两份 DLKM 模块树按原始布局复制。
+ system_dlkm 的版本子目录必须保留：
+@@ -54,8 +55,7 @@ vendor 基线更新时须同步修改提取脚本中的 ROM_VERSION，并重提
+ ```sh
+ source build/envsetup.sh
+ lunch yaap_houji-cp2a-user
+-m -j24 bootimage vendorbootimage dtboimage recoveryimage system_dlkmimage vendor_dlkmimage
+-m -j24 bacon
++m yaap bootimage initbootimage vendorbootimage dtboimage vbmetaimage vbmetasystemimage recoveryimage
+ ```
+ 
+ 切换模式前先保存或清理旧的产品输出。本次将之前源码模式的
+-- 
+2.56.1
+

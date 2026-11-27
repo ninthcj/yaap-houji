@@ -1,0 +1,39 @@
+From e68abc335660bb083494ee61c06466a4ced3a7ed Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Tue, 24 Nov 2026 10:29:31 -0400
+Subject: [PATCH 6/8] sm8650-common: label qcom-battery and ucsi typec sysfs
+ for Xiaomi fastcharge auth
+
+---
+ sepolicy/vendor/batterysecret.te | 2 +-
+ sepolicy/vendor/genfs_contexts   | 4 ++++
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/sepolicy/vendor/batterysecret.te b/sepolicy/vendor/batterysecret.te
+index 90f2123..cdd04ca 100644
+--- a/sepolicy/vendor/batterysecret.te
++++ b/sepolicy/vendor/batterysecret.te
+@@ -13,7 +13,7 @@ allow batterysecret vendor_sysfs_battery_supply:file rw_file_perms;
+ allow batterysecret vendor_sysfs_battery_supply:file write;
+ allow batterysecret vendor_sysfs_battery_supply:file { open read write };
+ allow batterysecret vendor_sysfs_battery_supply:dir r_dir_perms;
+-allow batterysecret sysfs_typec:dir search;
++r_dir_file(batterysecret, sysfs_typec)
+ allow batterysecret system_suspend_server:binder { call transfer };
+ allow batterysecret system_suspend_server:fd *;
+ allow batterysecret system_suspend_hwservice:hwservice_manager find;
+diff --git a/sepolicy/vendor/genfs_contexts b/sepolicy/vendor/genfs_contexts
+index 58c7be1..c43f116 100644
+--- a/sepolicy/vendor/genfs_contexts
++++ b/sepolicy/vendor/genfs_contexts
+@@ -1,3 +1,7 @@
++# Charger and Type-C
++genfscon sysfs /class/qcom-battery u:object_r:vendor_sysfs_battery_supply:s0
++genfscon sysfs /devices/platform/soc/soc:qcom,pmic_glink/soc:qcom,pmic_glink:qcom,ucsi/typec u:object_r:sysfs_typec:s0
++
+ # Fingerprint
+ genfscon sysfs "/devices/platform/soc/soc:xiaomi_fingerprint/fingerdown"    u:object_r:vendor_sysfs_displayfeature:s0
+ genfscon sysfs "/devices/platform/soc/soc:xiaomi_fingerprint/actpower"      u:object_r:sysfs_wakeup:s0
+-- 
+2.56.1
+

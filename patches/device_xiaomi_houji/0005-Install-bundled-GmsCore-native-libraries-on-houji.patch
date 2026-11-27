@@ -1,0 +1,24 @@
+From 9992a1ed8e02654158dab1cefa98d0012b9300e2 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 17:06:26 -0400
+Subject: [PATCH 05/10] Install bundled GmsCore native libraries on houji
+
+- Include the microG native-library group during the product image build because PackageManager does not extract native code from bundled apps.
+---
+ yaap_houji.mk | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/yaap_houji.mk b/yaap_houji.mk
+index 5bb8696..3f0b998 100644
+--- a/yaap_houji.mk
++++ b/yaap_houji.mk
+@@ -21,3 +21,6 @@ PRODUCT_BRAND := Xiaomi
+ PRODUCT_MODEL := 23127PN0CC
+ 
+ PRODUCT_OTA_ENFORCE_VINTF_KERNEL_REQUIREMENTS := true
++
++# System app scanning does not extract the upstream APK's compressed JNI libraries.
++PRODUCT_PACKAGES += GmsCore_arm64_libraries
+-- 
+2.56.1
+

@@ -1,0 +1,28 @@
+From f7f2369e30302093ae5552892a33194fef3c6f50 Mon Sep 17 00:00:00 2001
+From: ninthcj <327845320+ninthcj@users.noreply.github.com>
+Date: Mon, 23 Nov 2026 17:41:57 -0400
+Subject: [PATCH 06/10] Document houji release app exclusions
+
+- Distinguish the carrier entitlement app from the required Qualcomm IMS implementation.
+---
+ docs/dev/bringup.md | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/docs/dev/bringup.md b/docs/dev/bringup.md
+index 1cf1c0e..d20f5de 100644
+--- a/docs/dev/bringup.md
++++ b/docs/dev/bringup.md
+@@ -102,6 +102,10 @@ python3 device/xiaomi/houji/extract-files.py --kang /path/to/rom/images
+ 当前基线补齐国行相机 wide_ii/tele_ii 配置；按产品要求移除 Google Hotword
+ enrollment 和 SoterService 应用及专用 enrollment 文件。同版 `xiaomi-modem-common.jar` 随包提供；Pixel EuiccGoogle APK 不随包提供。
+ YAAP 产品使用清单跟踪的 OpenEUICC 作为 LPA，不依赖面向 Pixel EuiccGoogle 的策略模块。
++`yaap_houji-user` 使用原生 microG；不安装 Play 签名且内置 Google SDK 的 YASR、内置
++Wear Play Services 客户端的 TalkBack 预编译包或依赖 Firebase 的 `ImsServiceEntitlement`。
++国行 Qualcomm IMS 服务仍保留；需要 Google/Firebase carrier entitlement 的运营商功能和
++屏幕阅读器不随包提供。
+ 
+ `vendor/xiaomi/houji/radio/*.img` 使用 Git LFS，其他 vendor 文件正常提交。
+ 需要安装 Git LFS 并执行 `git lfs install`，推送时确保 LFS 对象一并上传。
+-- 
+2.56.1
+
