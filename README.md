@@ -18,7 +18,7 @@ Region-agnostic **Bring-Your-Own-Firmware (BYOF)** **YAAP 17 (Android 17, `seven
 - `manifest/houji.xml` — `.repo/local_manifests/houji.xml` pinning YAAP 17, Xiaomi device/vendor/hardware/UAPI, QTI telephony (`LA.QSSI.16.0`), `vendor/microg`, and `Vanadium`.
 - `patches/` & `apply-patches.sh` — Clean `git format-patch` series across the 8 adapted Android 17 repositories on branch `yaap-17`.
 - `Containerfile` & `.containerignore` — Rootless Podman Ubuntu 24.04 AOSP build environment.
-- `verify-preflight.py`, `verify-release.py`, `package-release.py`, `flash.sh` — Preflight checker, 119-check target-files auditor, `dist/` publisher, and interactive rootless installer.
+- `verify-preflight.py`, `verify-release.py`, `build-copy-partitions.py`, `package-release.py`, `flash.sh` — Preflight checker, 119-check target-files auditor, signed A/B firmware-alignment zip builder (`copy-partitions-houji.zip`), `dist/` publisher, and interactive rootless installer.
 
 ## Reproducing the Build
 
@@ -63,10 +63,21 @@ python3 /workspace/verify-release.py \
   --rom-dir /workspace/yaap \
   --keys-dir /workspace/keys \
   --out-report /workspace/dist/RELEASE_VERIFICATION.json
-python3 /workspace/package-release.py /workspace/yaap /workspace/dist
+python3 /workspace/build-copy-partitions.py \
+  --keys-dir /workspace/keys \
+  --host-out /workspace/yaap/out/host/linux-x86 \
+  --output /tmp/copy-partitions-houji.zip
+python3 /workspace/package-release.py \
+  --product-out /workspace/yaap/out/target/product/houji \
+  --images-dir /tmp/verify-work/payload \
+  --verification /workspace/dist/RELEASE_VERIFICATION.json \
+  --platform-tools /workspace/preflight/platform-tools_r37.0.3-linux.zip \
+  --flash-script /workspace/flash.sh \
+  --copy-partitions /tmp/copy-partitions-houji.zip \
+  --dist /workspace/dist
 ```
 
 ### 4. Pair with `6.12` (or `6.1` LTS) kernel & flash
 
-- Follow [`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji) (`6.12` default pure GKI 2.0 stack or `6.1` LTS) pointing `--rom-dir ../yaap-houji/yaap` and `--keys-dir ../keys`, then refresh physical/logical images alongside `./dist/` before flashing with `./dist/flash.sh flash` / `sideload`.
+- Follow [`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji) (`6.12` default pure GKI 2.0 stack or `6.1` LTS) pointing `--rom-dir ../yaap-houji/yaap` and `--keys-dir ../keys`, then refresh physical/logical images alongside `./dist/` before flashing with `./dist/flash.sh flash` / `sideload`. First-time installs automatically sideload the signed `copy-partitions-houji.zip` helper before the YAAP OTA zip so inactive-slot firmware matches the user's active HyperOS 3 baseline without bundling proprietary blobs.
 - **Linux Host Tip (ASMedia ASM4242 USB4 controllers):** Prefer a native SoC USB-A/USB-C port if ADB disconnects mid-transfer during `adb sideload`.

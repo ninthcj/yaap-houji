@@ -30,6 +30,8 @@ readonly FASTBOOT="$ROOT/platform-tools/fastboot"
 readonly IMG_DIR="$ROOT/images"
 readonly SUMS="$ROOT/SHA256SUMS"
 readonly VERIFICATION="$ROOT/BUILD_VERIFICATION.json"
+readonly COPY_PARTITIONS_REL="copy-partitions-houji.zip"
+readonly COPY_PARTITIONS_ZIP="$ROOT/$COPY_PARTITIONS_REL"
 if [[ -d "${XDG_STATE_HOME:-$HOME/.local/state}/yaap-houji-flash" && ! -d "${XDG_STATE_HOME:-$HOME/.local/state}/sm8650-houji-flash" ]]; then
     readonly STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/yaap-houji-flash"
 else
@@ -66,6 +68,7 @@ OTA_ZIP=""
 OTA_REL=""
 OTA_METADATA=""
 FIRMWARE_ZIP=""
+SKIP_COPY_PARTITIONS=0
 
 if [[ -t 1 ]]; then
     C_RED=$'\e[31m'; C_GRN=$'\e[32m'; C_YEL=$'\e[33m'; C_BLD=$'\e[1m'; C_OFF=$'\e[0m'
@@ -88,9 +91,12 @@ YAAP 17 first-time installer, Xiaomi 14 (houji / houjiin), bring-your-own-firmwa
 Usage:
   ./flash.sh verify                  check bundle integrity only (no device access)
   ./flash.sh flash    [-s SERIAL]    phase 1: identity check, bootloader checks, write 7 images
-  ./flash.sh sideload [-s SERIAL] [--firmware ZIP]
-                                     phase 2: sideload the OTA zip from recovery, optionally
-                                     after a firmware ZIP of your own
+  ./flash.sh copy-partitions [-s SERIAL]
+                                     mirror active slot's 28 non-OS firmware partitions to
+                                     the inactive slot from recovery "Apply from ADB"
+  ./flash.sh sideload [-s SERIAL] [--firmware ZIP] [--skip-copy-partitions]
+                                     phase 2: align inactive-slot firmware (copy-partitions),
+                                     optionally sideload your own firmware ZIP, then OTA zip
   ./flash.sh status   [-s SERIAL]    show the recorded progress for a device
 
 Requirements
@@ -103,9 +109,9 @@ Requirements
     is not OS3 only produces a warning over ADB. Region is never inferred.
   * An interactive terminal: every write needs a typed confirmation.
   * Bundle layout: platform-tools/{adb,fastboot}, images/ holding the 7 boot-chain
-    images plus super_empty.img, exactly one YAAP-17-*houji*.zip whose OTA pre-device
-    is exactly houji,houjiin, and SHA256SUMS covering them all. Only the bundled
-    adb/fastboot are used.
+    images plus super_empty.img, copy-partitions-houji.zip, exactly one YAAP-17-*houji*.zip
+    whose OTA pre-device is exactly houji,houjiin, and SHA256SUMS covering them all. Only
+    the bundled adb/fastboot are used.
 
 Procedure
   1. ./flash.sh flash
@@ -122,16 +128,16 @@ Procedure
        Back up your data first. This is required for a clean install.
        The script never formats anything.
   4. In recovery, by hand:  Apply update -> Apply from ADB.
-  5. ./flash.sh sideload [--firmware FIRMWARE.zip]
-       The firmware ZIP is sent first. If not signed by this release key, recovery
-       shows "Signature verification failed / Install untrusted package?".
-       Choose Yes on the phone only for known, matching regional firmware. Proceed
-       only after recovery reports success, then re-enter Apply from ADB for YAAP.
-       Sideloads only YAAP's OS partitions into the inactive slot. Ensure matching
-       regional HyperOS 3 firmware is present on the slot that will boot YAAP.
-       adb's exit status is NOT proof of success: read the recovery screen. The
-       script never reboots the device. Only when recovery reports success, choose
-       "Reboot system now" on the phone yourself.
+  5. ./flash.sh sideload [--firmware FIRMWARE.zip] [--skip-copy-partitions]
+       By default, copy-partitions-houji.zip is sent first to mirror your active slot's
+       regional OS3 firmware onto the inactive slot (skipping byte-identical partitions)
+       so an A/B slot switch never boots stale OEM firmware. Re-enter Apply from ADB
+       afterwards. If --firmware ZIP is given, it is sent next (recovery prompts
+       "Install untrusted package?" if not release-signed; choose Yes only for matching
+       regional firmware, then re-enter Apply from ADB). Finally, YAAP is sideloaded
+       into the inactive slot. adb's exit status is NOT proof of success: read the
+       recovery screen. The script never reboots the device. Only when recovery reports
+       success, choose "Reboot system now" on the phone yourself.
 
 Recovery paths
   * Recovery does not start: hold Power + Volume Down for the bootloader and rerun
@@ -311,13 +317,23 @@ verify_ota() {
     ok "$OTA_REL: A/B full OTA for $pre, $build, patch $spl"
 }
 
+verify_copy_partitions() {
+    [[ -f $COPY_PARTITIONS_ZIP && ! -L $COPY_PARTITIONS_ZIP ]] ||
+        die "Missing or non-regular copy-partitions zip: $COPY_PARTITIONS_REL"
+    sums_has "$COPY_PARTITIONS_REL" || die "SHA256SUMS has no entry for $COPY_PARTITIONS_REL"
+    [[ $(hex_at "$COPY_PARTITIONS_ZIP" 0 4) == 504b0304 ]] || die "$COPY_PARTITIONS_REL is not a ZIP archive."
+    zip_list "$COPY_PARTITIONS_ZIP" | grep -qxF -- "META-INF/com/google/android/update-binary" ||
+        die "$COPY_PARTITIONS_REL lacks META-INF/com/google/android/update-binary."
+    ok "$COPY_PARTITIONS_REL: signed A/B firmware slot-alignment helper present"
+}
+
 verify_bundle() {
     step "Bundle"
     local t f
     for t in sha256sum od awk sed grep tr sort paste stat timeout mktemp tee date head basename; do need_tool "$t"; done
     [[ -f $SUMS ]] || die "SHA256SUMS is missing."
     [[ -f $VERIFICATION && ! -L $VERIFICATION ]] || die "BUILD_VERIFICATION.json is missing."
-    for f in flash.sh BUILD_VERIFICATION.json; do
+    for f in flash.sh BUILD_VERIFICATION.json "$COPY_PARTITIONS_REL"; do
         sums_has "$f" || die "SHA256SUMS has no entry for $f"
     done
     for f in "$ADB" "$FASTBOOT"; do
@@ -329,6 +345,7 @@ verify_bundle() {
         die "SHA256SUMS verification failed; do not flash from a modified or incomplete bundle."
     ok "SHA256SUMS verified"
     verify_images
+    verify_copy_partitions
     verify_ota
     info "adb:      $("$ADB" version | head -n 1)"
     info "fastboot: $("$FASTBOOT" --version | head -n 1)"
@@ -377,6 +394,7 @@ begin_install_state() {
     state_set BASELINE_BUILD_UTC "$3"
     state_set BASELINE_FINGERPRINT "$4"
     state_set FLASH_DONE 0
+    state_set COPY_PARTITIONS_ATTESTED 0
     state_set SIDELOAD_STARTED 0
     state_set INSTALL_CONFIRMED 0
     state_set FIRMWARE_SHA256 ""
@@ -687,6 +705,47 @@ EOF
     wait_for_sideload_state
 }
 
+sideload_copy_partitions() {
+    local rc=0 cp_hash
+    cp_hash=$(sums_hash "$COPY_PARTITIONS_REL")
+    step "A/B firmware slot alignment (serial $SERIAL)"
+    cat <<EOF
+  helper: $COPY_PARTITIONS_REL
+  sha256: $cp_hash
+  Mirrors the active slot's 28 non-OS slotted firmware / boot-LUN partitions to the
+  inactive slot (skipping byte-identical partitions; leaves 7 OS boot partitions,
+  super, userdata, persist, metadata, and RF calibration untouched).
+EOF
+    confirm "COPY-PARTITIONS $SERIAL" "Mirror active-slot firmware to inactive slot on $SERIAL via $COPY_PARTITIONS_REL now." ||
+        die "Not confirmed; nothing was sideloaded."
+    state_set COPY_PARTITIONS_ATTESTED 0
+    state_set SIDELOAD_STARTED 1
+    sideload_zip "$COPY_PARTITIONS_ZIP" || rc=$?
+    if (( rc != 0 )); then
+        die "adb sideload of $COPY_PARTITIONS_REL exited with status $rc (check recovery screen). Stopped before YAAP OTA."
+    fi
+    cat <<EOF
+
+${C_BLD}adb sideload exited with status 0. Read the recovery screen.${C_OFF}
+Recovery must show "Done (...): ... copied, ... already matched." with no error and no
+"Installation aborted".
+EOF
+    confirm "COPY-OK $SERIAL" "Type this ONLY if recovery reported $COPY_PARTITIONS_REL completed successfully." ||
+        die "Slot alignment not attested; stopped. Re-enter Apply from ADB and rerun."
+    state_set COPY_PARTITIONS_ATTESTED 1
+    log "copy-partitions attested by operator sha256=$cp_hash"
+}
+
+cmd_copy_partitions() {
+    verify_bundle
+    resolve_device adb
+    init_state
+    [[ $DEV_STATE == sideload ]] ||
+        die "ADB state of $SERIAL is '$DEV_STATE', not 'sideload'. In recovery choose Apply update -> Apply from ADB and rerun."
+    sideload_copy_partitions
+    info "Done. Re-enter Apply update -> Apply from ADB on the phone before sideloading YAAP."
+}
+
 cmd_sideload() {
     verify_bundle
     resolve_device adb
@@ -697,6 +756,14 @@ cmd_sideload() {
     [[ $(state_get OTA_SHA256) == "$(sums_hash "$OTA_REL")" ]] || die "The OTA zip differs from the one recorded at flash time."
     [[ $DEV_STATE == sideload ]] ||
         die "ADB state of $SERIAL is '$DEV_STATE', not 'sideload'. In recovery: Factory reset -> Format data, then Apply update -> Apply from ADB; rerun afterwards."
+    if (( ! SKIP_COPY_PARTITIONS )) && [[ $(state_get COPY_PARTITIONS_ATTESTED) != 1 ]]; then
+        sideload_copy_partitions
+        cat <<EOF
+
+${C_BLD}Now, by hand in recovery${C_OFF}: re-enter  Apply update -> Apply from ADB.
+EOF
+        wait_for_sideload_state
+    fi
     [[ -z $FIRMWARE_ZIP ]] || { verify_firmware_zip; sideload_firmware; }
     step "Sideload (serial $SERIAL)"
     cat <<EOF
@@ -746,18 +813,21 @@ main() {
             --serial=*)  SERIAL=${1#--serial=}; shift ;;
             --firmware)  [[ $# -ge 2 ]] || die "$1 needs a value."; FIRMWARE_ZIP=$2; shift 2 ;;
             --firmware=*) FIRMWARE_ZIP=${1#--firmware=}; shift ;;
+            --skip-copy-partitions) SKIP_COPY_PARTITIONS=1; shift ;;
             -h|--help)   usage; exit 0 ;;
             *) die "Unknown argument: $1 (see --help)." ;;
         esac
     done
     [[ -z $SERIAL ]] || valid_serial "$SERIAL"
     [[ -z $FIRMWARE_ZIP || $cmd == sideload ]] || die "--firmware is only valid with the sideload command."
+    (( ! SKIP_COPY_PARTITIONS )) || [[ $cmd == sideload ]] || die "--skip-copy-partitions is only valid with the sideload command."
     case $cmd in
-        verify)   verify_bundle ;;
-        flash)    require_tty; cmd_flash ;;
-        sideload) require_tty; cmd_sideload ;;
-        status)   cmd_status ;;
-        -h|--help|help) usage ;;
+        verify)          verify_bundle ;;
+        flash)           require_tty; cmd_flash ;;
+        copy-partitions) require_tty; cmd_copy_partitions ;;
+        sideload)        require_tty; cmd_sideload ;;
+        status)          cmd_status ;;
+        -h|--help|help)  usage ;;
         *) usage; exit 2 ;;
     esac
 }

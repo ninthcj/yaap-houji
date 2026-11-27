@@ -56,11 +56,35 @@ REQUIRED_CHECKS = (
 BOOTSTRAP = ("boot", "init_boot", "vendor_boot", "dtbo", "vbmeta", "vbmeta_system", "recovery", "super_empty")
 SDK_FILES = ("adb", "fastboot", "NOTICE.txt", "source.properties")
 SDK_ARCHIVE_SHA256 = "214548146cadb2ca3508143d8a1d4be4c59de5bb837253e3ede89ed74cf450d1"
+COPY_PARTITIONS_NAME = "copy-partitions-houji.zip"
+BINARY_BLOB_SUFFIXES = (".img", ".bin", ".elf", ".mbn")
 
 
 def sha256(path):
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def verify_copy_partitions_zip(path):
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f"{path}: missing or non-regular copy-partitions zip")
+    with zipfile.ZipFile(path) as archive:
+        names = set(archive.namelist())
+        if "META-INF/com/google/android/update-binary" not in names:
+            raise ValueError(f"{path}: missing META-INF/com/google/android/update-binary")
+        comment = archive.comment
+        if len(comment) < 6 or comment[-4:-2] != b"\xff\xff":
+            raise ValueError(f"{path}: missing AOSP whole-file (-w) EOCD signature footer")
+        sig_start = comment[-6] + (comment[-5] << 8)
+        comment_size = comment[-2] + (comment[-1] << 8)
+        if comment_size != len(comment) or not (6 <= sig_start <= comment_size):
+            raise ValueError(f"{path}: invalid AOSP whole-file (-w) signature footer")
+        bad_blobs = [n for n in names if n.lower().endswith(BINARY_BLOB_SUFFIXES)]
+        if bad_blobs:
+            raise ValueError(f"{path}: must not contain firmware blobs: {bad_blobs[:5]}")
+        script = archive.read("META-INF/com/google/android/update-binary")
+        if not script.startswith(b"#!/system/bin/sh\n"):
+            raise ValueError(f"{path}: update-binary must start with #!/system/bin/sh")
 
 
 def copy_audited(src, dest, record):
@@ -91,6 +115,7 @@ def publish(args):
         raise ValueError("Audit is missing the houji OTA and exact first-flash image set")
     if sha256(args.platform_tools) != SDK_ARCHIVE_SHA256:
         raise ValueError("Unexpected Android platform-tools archive SHA-256")
+    verify_copy_partitions_zip(args.copy_partitions)
     if args.dist.exists() or args.dist.is_symlink():
         raise ValueError(f"Destination already exists: {args.dist}")
 
@@ -99,6 +124,9 @@ def publish(args):
         (staging / "images").mkdir()
         (staging / "platform-tools").mkdir()
         copy_audited(args.product_out / ota["file"], staging / ota["file"], ota)
+        cp_dest = staging / COPY_PARTITIONS_NAME
+        shutil.copyfile(args.copy_partitions, cp_dest)
+        cp_dest.chmod(0o644)
         for name in BOOTSTRAP:
             file = f"{name}.img"
             copy_audited(args.images_dir / file, staging / "images" / file, images[name])
@@ -124,7 +152,7 @@ def publish(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    for argument in ("product-out", "images-dir", "verification", "platform-tools", "flash-script", "dist"):
+    for argument in ("product-out", "images-dir", "verification", "platform-tools", "flash-script", "copy-partitions", "dist"):
         parser.add_argument(f"--{argument}", type=Path, required=True)
     args = parser.parse_args()
     try:
