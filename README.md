@@ -2,7 +2,7 @@
 
 Region-agnostic **Bring-Your-Own-Firmware (BYOF)** **YAAP 17 (Android 17, `seventeen`)** ROM adaptation patches, local manifest, 119-check release auditor, and rootless interactive installer for **Xiaomi 14 (`houji` / `houjiin`, Snapdragon 8 Gen 3 `SM8650`)**.
 
-> **Decoupled Kernel Architecture:** This repository focuses strictly on the Android 17 userspace, ROM adaptation, auditing, and flashing layers. For the companion ROM-agnostic kernel stack (`6.12` pure GKI 2.0 with `0` `kernel/common` patches & full OOT DDK sources, or `6.1` LTS), see **[`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji)**.
+> **Decoupled Kernel Architecture:** This repository focuses strictly on the Android 17 userspace, ROM adaptation, auditing, and flashing layers. For the companion ROM-agnostic kernel stack (`6.18` & `6.12` pure GKI 2.0 with `0` `kernel/common` patches & full OOT DDK sources, or `6.1` LTS), see **[`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji)**.
 
 ## Highlights
 
@@ -77,7 +77,7 @@ python3 /workspace/package-release.py \
   --dist /workspace/dist
 ```
 
-### 4. Pair with `6.12` (or `6.1` LTS) kernel & flash
+### 4. Pair with `6.18` / `6.12` (or `6.1` LTS) kernel & flash
 
-- Follow [`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji) (`6.12` default pure GKI 2.0 stack or `6.1` LTS) pointing `--rom-dir ../yaap-houji/yaap` and `--keys-dir ../keys`, then refresh physical/logical images alongside `./dist/` before flashing with `./dist/flash.sh flash` / `sideload`. First-time installs automatically sideload the signed `copy-partitions-houji.zip` helper before the YAAP OTA zip so inactive-slot firmware matches the user's active HyperOS 3 baseline without bundling proprietary blobs.
+- Follow [`ninthcj/SM8650-houji`](https://github.com/ninthcj/SM8650-houji) (`6.18` default or `6.12` pure GKI 2.0 stack, or `6.1` LTS) pointing `--rom-dir ../yaap-houji/yaap` and `--keys-dir ../keys`, then refresh physical/logical images alongside `./dist/` before flashing with `./dist/flash.sh flash` / `sideload`. First-time installs automatically sideload the signed `copy-partitions-houji.zip` helper before the YAAP OTA zip so inactive-slot firmware matches the user's active HyperOS 3 baseline without bundling proprietary blobs.
 - **Linux Host Tip (ASMedia ASM4242 USB4 controllers):** Prefer a native SoC USB-A/USB-C port if ADB disconnects mid-transfer during `adb sideload`.
